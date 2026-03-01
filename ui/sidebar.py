@@ -50,6 +50,12 @@ def reset_load_case_editor_widgets() -> None:
     _reset_widget_keys(["editor_load_cases_elastic", "editor_load_cases_plastic"])
 
 
+def _rebuild_void_editor_keys_from_geometry() -> None:
+    st.session_state.void_editor_keys = [
+        str(uuid.uuid4()) for _ in st.session_state.data["geometry"].get("concrete_voids", [])
+    ]
+
+
 def _clean_point_rows(rows):
     cleaned = coerce_point_rows(rows)
     return [{"id": pt.get("id"), "x": pt["x"], "y": pt["y"]} for pt in cleaned]
@@ -161,7 +167,7 @@ def _render_geometry_inputs():
     data["geometry"] = geom
 
     if "void_editor_keys" not in st.session_state:
-        st.session_state.void_editor_keys = [str(uuid.uuid4()) for _ in geom.get("concrete_voids", [])]
+        _rebuild_void_editor_keys_from_geometry()
 
     while len(st.session_state.void_editor_keys) < len(geom.get("concrete_voids", [])):
         st.session_state.void_editor_keys.append(str(uuid.uuid4()))
@@ -193,10 +199,8 @@ def _render_geometry_inputs():
         if st.button("Load example section", use_container_width=True):
             reset_geometry_editor_widgets(clear_void_keys=True)
             data["geometry"] = load_example_geometry()
-            data["geometry"] = normalize_geometry_for_use(data["geometry"])
-            st.session_state.void_editor_keys = [
-                str(uuid.uuid4()) for _ in data["geometry"].get("concrete_voids", [])
-            ]
+            data["geometry"] = validate_winding_constraints(normalize_point_ids(data["geometry"]))
+            _rebuild_void_editor_keys_from_geometry()
             st.rerun()
 
     with right_col:
@@ -208,7 +212,7 @@ def _render_geometry_inputs():
                 "reinforcement_mild": [],
                 "reinforcement_prestressed": [],
             }
-            st.session_state.void_editor_keys = []
+            _rebuild_void_editor_keys_from_geometry()
             st.rerun()
 
     if st.button("Add void", key="add_void", use_container_width=True):
@@ -234,7 +238,7 @@ def _render_geometry_inputs():
                 data["geometry"]["concrete_voids"].pop(i)
                 removed_uuid = st.session_state.void_editor_keys.pop(i)
                 _reset_widget_keys(["editor_outline", f"editor_void_{removed_uuid}"])
-                data["geometry"] = normalize_geometry_for_use(data["geometry"])
+                data["geometry"] = validate_winding_constraints(normalize_point_ids(data["geometry"]))
                 st.rerun()
 
             void_records = sorted(void, key=lambda pt: pt["id"])
