@@ -21,6 +21,8 @@ GEOMETRY_EDITOR_BASE_KEYS = ["editor_outline", "editor_mild", "editor_pre"]
 
 
 def _seed_widget(key, value):
+    if key.startswith("editor_"):
+        return
     if key not in st.session_state:
         st.session_state[key] = value
 
@@ -97,9 +99,9 @@ def render_sidebar():
 
     st.sidebar.divider()
     st.sidebar.header("Data Management")
-    st.sidebar.button("Load JSON File", use_container_width=True)
-    st.sidebar.button("Save JSON File", use_container_width=True)
-    st.sidebar.button("Export Results to PDF", type="primary", use_container_width=True)
+    st.sidebar.button("Load JSON File", width="stretch")
+    st.sidebar.button("Save JSON File", width="stretch")
+    st.sidebar.button("Export Results to PDF", type="primary", width="stretch")
 
 
 def _render_material_inputs():
@@ -169,7 +171,7 @@ def _render_geometry_inputs():
     outline_records = sorted(geom.get("concrete_outline", []), key=lambda pt: pt["id"])
     df_outline = pd.DataFrame(outline_records, columns=["id", "x", "y"])
     edited_outline = st.data_editor(
-        df_outline, num_rows="dynamic", use_container_width=True, key="editor_outline"
+        df_outline, num_rows="dynamic", width="stretch", key="editor_outline"
     )
 
     next_geom = copy.deepcopy(geom)
@@ -184,7 +186,7 @@ def _render_geometry_inputs():
     left_col, right_col = st.columns(2)
 
     with left_col:
-        if st.button("Load example section", use_container_width=True):
+        if st.button("Load example section", width="stretch"):
             reset_geometry_editor_widgets(clear_void_keys=True)
             data["geometry"] = load_example_geometry()
             data["geometry"] = validate_winding_constraints(normalize_point_ids(data["geometry"]))
@@ -192,7 +194,7 @@ def _render_geometry_inputs():
             st.rerun()
 
     with right_col:
-        if st.button("Reset geometry", use_container_width=True):
+        if st.button("Reset geometry", width="stretch"):
             reset_geometry_editor_widgets(clear_void_keys=True)
             data["geometry"] = {
                 "concrete_outline": [],
@@ -203,7 +205,7 @@ def _render_geometry_inputs():
             _rebuild_void_editor_keys_from_geometry()
             st.rerun()
 
-    if st.button("Add void", key="add_void", use_container_width=True):
+    if st.button("Add void", key="add_void", width="stretch"):
         data["geometry"].setdefault("concrete_voids", []).append(
             [
                 {"id": 1, "x": -0.10, "y": -0.10},
@@ -222,7 +224,7 @@ def _render_geometry_inputs():
         void_uuid = st.session_state.void_editor_keys[i]
         void_key = f"editor_void_{void_uuid}"
         with st.expander(f"Void {i + 1}", expanded=False):
-            if st.button("Remove this void", key=f"remove_void_{i}", use_container_width=True):
+            if st.button("Remove this void", key=f"remove_void_{i}", width="stretch"):
                 data["geometry"]["concrete_voids"].pop(i)
                 removed_uuid = st.session_state.void_editor_keys.pop(i)
                 _reset_widget_keys(["editor_outline", f"editor_void_{removed_uuid}"])
@@ -232,7 +234,7 @@ def _render_geometry_inputs():
             void_records = sorted(void, key=lambda pt: pt["id"])
             df_void = pd.DataFrame(void_records, columns=["id", "x", "y"])
             edited_void = st.data_editor(
-                df_void, num_rows="dynamic", use_container_width=True, key=void_key
+                df_void, num_rows="dynamic", width="stretch", key=void_key
             )
 
             before = copy.deepcopy(data["geometry"])
@@ -247,7 +249,7 @@ def _render_geometry_inputs():
     st.write("**Mild Steel (x, y, area mm²)**")
     df_mild = pd.DataFrame(data["geometry"].get("reinforcement_mild", []), columns=["id", "x", "y", "area"])
     edited_mild = st.data_editor(
-        df_mild, num_rows="dynamic", use_container_width=True, key="editor_mild"
+        df_mild, num_rows="dynamic", width="stretch", key="editor_mild"
     )
 
     before = copy.deepcopy(data["geometry"])
@@ -265,7 +267,7 @@ def _render_geometry_inputs():
         data["geometry"].get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"]
     )
     edited_pre = st.data_editor(
-        df_pre, num_rows="dynamic", use_container_width=True, key="editor_pre"
+        df_pre, num_rows="dynamic", width="stretch", key="editor_pre"
     )
 
     before = copy.deepcopy(data["geometry"])
@@ -328,14 +330,14 @@ def _render_load_case_inputs():
         edited_elastic = st.data_editor(
             df_elastic,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             key="editor_load_cases_elastic",
         )
         data["load_cases"]["elastic"] = edited_elastic.to_dict("records")
 
         add_col, rm_col = st.columns(2)
         with add_col:
-            if st.button("Add elastic load case", key="add_elastic_case", use_container_width=True):
+            if st.button("Add elastic load case", key="add_elastic_case", width="stretch"):
                 next_id = _get_next_load_case_id(data["load_cases"]["elastic"])
                 data["load_cases"]["elastic"].append(
                     {
@@ -354,7 +356,7 @@ def _render_load_case_inputs():
                 reset_load_case_editor_widgets()
                 st.rerun()
         with rm_col:
-            if st.button("Remove last elastic load case", key="remove_elastic_case", use_container_width=True):
+            if st.button("Remove last elastic load case", key="remove_elastic_case", width="stretch"):
                 if data["load_cases"]["elastic"]:
                     data["load_cases"]["elastic"].pop()
                     reset_load_case_editor_widgets()
@@ -366,14 +368,14 @@ def _render_load_case_inputs():
         edited_plastic = st.data_editor(
             df_plastic,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             key="editor_load_cases_plastic",
         )
         data["load_cases"]["plastic"] = edited_plastic.to_dict("records")
 
         add_col, rm_col = st.columns(2)
         with add_col:
-            if st.button("Add plastic load case", key="add_plastic_case", use_container_width=True):
+            if st.button("Add plastic load case", key="add_plastic_case", width="stretch"):
                 next_id = _get_next_load_case_id(data["load_cases"]["plastic"])
                 data["load_cases"]["plastic"].append(
                     {
@@ -388,7 +390,7 @@ def _render_load_case_inputs():
                 reset_load_case_editor_widgets()
                 st.rerun()
         with rm_col:
-            if st.button("Remove last plastic load case", key="remove_plastic_case", use_container_width=True):
+            if st.button("Remove last plastic load case", key="remove_plastic_case", width="stretch"):
                 if data["load_cases"]["plastic"]:
                     data["load_cases"]["plastic"].pop()
                     reset_load_case_editor_widgets()

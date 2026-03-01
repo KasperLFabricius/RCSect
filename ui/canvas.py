@@ -147,4 +147,4 @@ def render_geometry_plot():
             dict(type="line", x0=0, x1=0, y0=-1e3, y1=1e3, line=dict(color="#B0B0B0", width=1, dash="dash")),
         ],
     )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": True})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": True})
