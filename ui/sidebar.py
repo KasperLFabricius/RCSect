@@ -64,6 +64,8 @@ def _render_material_inputs():
 def _render_geometry_inputs():
     """Helper function to render the interactive data editors for coordinates."""
     geom = st.session_state.data["geometry"]
+    if "concrete_voids" not in geom:
+        geom["concrete_voids"] = []
     
     st.write("**Concrete Outline (Clockwise)**")
     df_outline = pd.DataFrame(geom.get("concrete_outline", [{"x": 0.0, "y": 0.0}]))
@@ -77,6 +79,47 @@ def _render_geometry_inputs():
     st.session_state.data["geometry"] = validate_winding_constraints(
         st.session_state.data["geometry"]
     )
+
+    st.write("**Concrete voids (Counterclockwise)**")
+    st.caption("Orientation will be auto-normalized.")
+
+    if st.button("Add void", key="add_void", use_container_width=True):
+        geom["concrete_voids"].append(
+            [
+                {"x": -0.10, "y": -0.10},
+                {"x": 0.10, "y": -0.10},
+                {"x": 0.10, "y": 0.10},
+                {"x": -0.10, "y": 0.10},
+            ]
+        )
+        st.session_state.data["geometry"] = validate_winding_constraints(
+            st.session_state.data["geometry"]
+        )
+
+    for i, void in enumerate(geom["concrete_voids"]):
+        with st.expander(f"Void {i+1}", expanded=False):
+            if st.button(
+                "Remove this void",
+                key=f"remove_void_{i}",
+                use_container_width=True,
+            ):
+                geom["concrete_voids"].pop(i)
+                st.session_state.data["geometry"] = validate_winding_constraints(
+                    st.session_state.data["geometry"]
+                )
+                st.rerun()
+
+            df_void = pd.DataFrame(void if void else [{"x": 0.0, "y": 0.0}])
+            edited_void = st.data_editor(
+                df_void,
+                num_rows="dynamic",
+                use_container_width=True,
+                key=f"editor_void_{i}",
+            )
+            geom["concrete_voids"][i] = edited_void.to_dict("records")
+            st.session_state.data["geometry"] = validate_winding_constraints(
+                st.session_state.data["geometry"]
+            )
 
     st.write("**Mild Steel (x, y, area mm²)**")
     df_mild = pd.DataFrame(geom.get("reinforcement_mild", [{"id": 1, "x": 0.0, "y": 0.0, "area": 0.0}]))
