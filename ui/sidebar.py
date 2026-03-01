@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import uuid
 from utils.data_io import initialize_session_state, validate_winding_constraints
 
 def render_sidebar():
@@ -66,6 +67,18 @@ def _render_geometry_inputs():
     geom = st.session_state.data["geometry"]
     if "concrete_voids" not in geom:
         geom["concrete_voids"] = []
+
+    if "void_editor_keys" not in st.session_state:
+        st.session_state.void_editor_keys = []
+
+    void_editor_keys = st.session_state.void_editor_keys
+    void_count = len(geom["concrete_voids"])
+    if len(void_editor_keys) < void_count:
+        void_editor_keys.extend(
+            str(uuid.uuid4()) for _ in range(void_count - len(void_editor_keys))
+        )
+    elif len(void_editor_keys) > void_count:
+        del void_editor_keys[void_count:]
     
     st.write("**Concrete Outline (Clockwise)**")
     df_outline = pd.DataFrame(geom.get("concrete_outline", [{"x": 0.0, "y": 0.0}]))
@@ -92,6 +105,7 @@ def _render_geometry_inputs():
                 {"x": -0.10, "y": 0.10},
             ]
         )
+        void_editor_keys.append(str(uuid.uuid4()))
         st.session_state.data["geometry"] = validate_winding_constraints(
             st.session_state.data["geometry"]
         )
@@ -104,6 +118,7 @@ def _render_geometry_inputs():
                 use_container_width=True,
             ):
                 geom["concrete_voids"].pop(i)
+                void_editor_keys.pop(i)
                 st.session_state.data["geometry"] = validate_winding_constraints(
                     st.session_state.data["geometry"]
                 )
@@ -114,7 +129,7 @@ def _render_geometry_inputs():
                 df_void,
                 num_rows="dynamic",
                 use_container_width=True,
-                key=f"editor_void_{i}",
+                key=f"editor_void_{void_editor_keys[i]}",
             )
             geom["concrete_voids"][i] = edited_void.to_dict("records")
             st.session_state.data["geometry"] = validate_winding_constraints(
