@@ -26,6 +26,12 @@ def integrate_concrete_zone(geom, eps0, kx, ky, Ec_eff_kN_m2):
 
     def integrate_triangle(triangle: Polygon):
         nonlocal N_c, Mx_c, My_c, max_sigma_c
+        if len(triangle.interiors) > 0:
+            for tri in triangulate(triangle):
+                tri_clip = tri.intersection(triangle)
+                integrate_geom(tri_clip)
+            return
+
         coords = list(triangle.exterior.coords)[:-1]
         if len(coords) != 3:
             integrate_geom(triangle)
@@ -63,7 +69,7 @@ def integrate_concrete_zone(geom, eps0, kx, ky, Ec_eff_kN_m2):
 
         if isinstance(g, Polygon):
             coords = list(g.exterior.coords)[:-1]
-            if len(coords) == 3:
+            if len(coords) == 3 and len(g.interiors) == 0:
                 integrate_triangle(g)
                 return
 
@@ -189,6 +195,12 @@ class ElasticSolver:
 
         def integrate_triangle(triangle: Polygon):
             nonlocal I0, Ix, Iy, Ixx, Iyy, Ixy
+            if len(triangle.interiors) > 0:
+                for tri in triangulate(triangle):
+                    tri_clip = tri.intersection(triangle)
+                    integrate_geom(tri_clip)
+                return
+
             coords = list(triangle.exterior.coords)[:-1]
             if len(coords) != 3:
                 integrate_geom(triangle)
@@ -223,7 +235,7 @@ class ElasticSolver:
 
             if isinstance(g, Polygon):
                 coords = list(g.exterior.coords)[:-1]
-                if len(coords) == 3:
+                if len(coords) == 3 and len(g.interiors) == 0:
                     integrate_triangle(g)
                     return
 
