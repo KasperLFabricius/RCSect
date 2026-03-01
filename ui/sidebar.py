@@ -43,7 +43,7 @@ def reset_geometry_editor_widgets(clear_void_keys: bool = True) -> None:
     _reset_widget_keys(keys_to_clear)
 
     if clear_void_keys:
-        st.session_state["void_editor_keys"] = []
+        st.session_state.pop("void_editor_keys", None)
 
 
 def reset_load_case_editor_widgets() -> None:
@@ -59,15 +59,6 @@ def _rebuild_void_editor_keys_from_geometry() -> None:
 def _clean_point_rows(rows):
     cleaned = coerce_point_rows(rows)
     return [{"id": pt.get("id"), "x": pt["x"], "y": pt["y"]} for pt in cleaned]
-
-
-def _sync_both_rebar_widgets(geometry):
-    st.session_state["editor_mild"] = pd.DataFrame(
-        geometry.get("reinforcement_mild", []), columns=["id", "x", "y", "area"]
-    )
-    st.session_state["editor_pre"] = pd.DataFrame(
-        geometry.get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"]
-    )
 
 
 def render_sidebar():
@@ -175,11 +166,10 @@ def _render_geometry_inputs():
         st.session_state.void_editor_keys = st.session_state.void_editor_keys[: len(geom.get("concrete_voids", []))]
 
     st.write("**Concrete Outline (Clockwise)**")
-    outline_key = "editor_outline"
     outline_records = sorted(geom.get("concrete_outline", []), key=lambda pt: pt["id"])
-    _seed_widget(outline_key, pd.DataFrame(outline_records, columns=["id", "x", "y"]))
+    df_outline = pd.DataFrame(outline_records, columns=["id", "x", "y"])
     edited_outline = st.data_editor(
-        st.session_state[outline_key], num_rows="dynamic", use_container_width=True, key=outline_key
+        df_outline, num_rows="dynamic", use_container_width=True, key="editor_outline"
     )
 
     next_geom = copy.deepcopy(geom)
@@ -187,9 +177,7 @@ def _render_geometry_inputs():
     next_geom = validate_winding_constraints(normalize_point_ids(next_geom))
     if next_geom != geom:
         data["geometry"] = next_geom
-        st.session_state[outline_key] = pd.DataFrame(
-            sorted(next_geom.get("concrete_outline", []), key=lambda pt: pt["id"]), columns=["id", "x", "y"]
-        )
+        st.session_state.pop("editor_outline", None)
         st.rerun()
 
     st.write("**Concrete voids (Counterclockwise)**")
@@ -242,9 +230,9 @@ def _render_geometry_inputs():
                 st.rerun()
 
             void_records = sorted(void, key=lambda pt: pt["id"])
-            _seed_widget(void_key, pd.DataFrame(void_records, columns=["id", "x", "y"]))
+            df_void = pd.DataFrame(void_records, columns=["id", "x", "y"])
             edited_void = st.data_editor(
-                st.session_state[void_key], num_rows="dynamic", use_container_width=True, key=void_key
+                df_void, num_rows="dynamic", use_container_width=True, key=void_key
             )
 
             before = copy.deepcopy(data["geometry"])
@@ -253,19 +241,13 @@ def _render_geometry_inputs():
             candidate = validate_winding_constraints(normalize_point_ids(candidate))
             if candidate != before:
                 data["geometry"] = candidate
-                st.session_state[void_key] = pd.DataFrame(
-                    sorted(candidate["concrete_voids"][i], key=lambda pt: pt["id"]), columns=["id", "x", "y"]
-                )
+                st.session_state.pop(void_key, None)
                 st.rerun()
 
     st.write("**Mild Steel (x, y, area mm²)**")
-    mild_key = "editor_mild"
-    _seed_widget(
-        mild_key,
-        pd.DataFrame(data["geometry"].get("reinforcement_mild", []), columns=["id", "x", "y", "area"]),
-    )
+    df_mild = pd.DataFrame(data["geometry"].get("reinforcement_mild", []), columns=["id", "x", "y", "area"])
     edited_mild = st.data_editor(
-        st.session_state[mild_key], num_rows="dynamic", use_container_width=True, key=mild_key
+        df_mild, num_rows="dynamic", use_container_width=True, key="editor_mild"
     )
 
     before = copy.deepcopy(data["geometry"])
@@ -274,19 +256,16 @@ def _render_geometry_inputs():
     candidate = normalize_rebar_ids(candidate)
     if candidate != before:
         data["geometry"] = candidate
-        _sync_both_rebar_widgets(candidate)
+        st.session_state.pop("editor_mild", None)
+        st.session_state.pop("editor_pre", None)
         st.rerun()
 
     st.write("**Prestressed Steel (x, y, area mm²)**")
-    pre_key = "editor_pre"
-    _seed_widget(
-        pre_key,
-        pd.DataFrame(
-            data["geometry"].get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"]
-        ),
+    df_pre = pd.DataFrame(
+        data["geometry"].get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"]
     )
     edited_pre = st.data_editor(
-        st.session_state[pre_key], num_rows="dynamic", use_container_width=True, key=pre_key
+        df_pre, num_rows="dynamic", use_container_width=True, key="editor_pre"
     )
 
     before = copy.deepcopy(data["geometry"])
@@ -297,7 +276,8 @@ def _render_geometry_inputs():
     candidate = normalize_rebar_ids(candidate)
     if candidate != before:
         data["geometry"] = candidate
-        _sync_both_rebar_widgets(candidate)
+        st.session_state.pop("editor_mild", None)
+        st.session_state.pop("editor_pre", None)
         st.rerun()
 
     plot_options = data["plot_options"]
@@ -344,12 +324,9 @@ def _render_load_case_inputs():
 
     if mode in ["Elastic", "Both"]:
         st.write("**Elastic load cases**")
-        _seed_widget(
-            "editor_load_cases_elastic",
-            pd.DataFrame(data["load_cases"].get("elastic", []), columns=elastic_columns),
-        )
+        df_elastic = pd.DataFrame(data["load_cases"].get("elastic", []), columns=elastic_columns)
         edited_elastic = st.data_editor(
-            st.session_state["editor_load_cases_elastic"],
+            df_elastic,
             num_rows="dynamic",
             use_container_width=True,
             key="editor_load_cases_elastic",
@@ -385,12 +362,9 @@ def _render_load_case_inputs():
 
     if mode in ["Plastic", "Both"]:
         st.write("**Plastic load cases**")
-        _seed_widget(
-            "editor_load_cases_plastic",
-            pd.DataFrame(data["load_cases"].get("plastic", []), columns=plastic_columns),
-        )
+        df_plastic = pd.DataFrame(data["load_cases"].get("plastic", []), columns=plastic_columns)
         edited_plastic = st.data_editor(
-            st.session_state["editor_load_cases_plastic"],
+            df_plastic,
             num_rows="dynamic",
             use_container_width=True,
             key="editor_load_cases_plastic",
