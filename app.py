@@ -93,19 +93,30 @@ def main():
         # 3. Execution: Elastic Mode
         if mode in ["Elastic", "Both"]:
             st.write("### Elastic Analysis")
-            # For demonstration, we use placeholder loads. In the final version,
-            # these will be extracted from data["load_cases"]
             elastic_engine = ElasticSolver(cross_section=cs, E_c=33000.0, E_s=200000.0)
-            
-            try:
-                # Utilizing the exact 4-step combination algorithm
-                el_results = elastic_engine.solve_combined_loads(
-                    P_l=408.98, Mx_l=-49.87, My_l=0.0, n_l=22.93,
-                    P_s=-5.45, Mx_s=-36.12, My_s=0.0, n_s=5.733
-                )
-                render_elastic_results(el_results)
-            except Exception as e:
-                st.error(f"Elastic Solver Error: {e}")
+            elastic_cases = data.get("load_cases", {}).get("elastic", [])
+
+            if not elastic_cases:
+                st.info("No elastic load cases configured.")
+
+            for case in elastic_cases:
+                case_id = case.get("id", "?")
+                case_name = case.get("name", "Unnamed")
+                with st.expander(f"Elastic load case {case_id}: {case_name}", expanded=False):
+                    try:
+                        el_results = elastic_engine.solve_combined_loads(
+                            P_l=case.get("P_l", 0.0),
+                            Mx_l=case.get("Mx_l", 0.0),
+                            My_l=case.get("My_l", 0.0),
+                            n_l=case.get("n_l", 1.0),
+                            P_s=case.get("P_s", 0.0),
+                            Mx_s=case.get("Mx_s", 0.0),
+                            My_s=case.get("My_s", 0.0),
+                            n_s=case.get("n_s", 1.0),
+                        )
+                        render_elastic_results(el_results)
+                    except Exception as e:
+                        st.error(f"Elastic Solver Error: {e}")
 
         st.divider()
 
@@ -113,29 +124,40 @@ def main():
         if mode in ["Plastic", "Both"]:
             st.write("### Plastic Analysis")
             plastic_engine = PlasticSolver(cs, conc, mild, pre)
-            
-            # Using placeholder load case parameters as defined in the documentation
-            target_P = 1976.0  
-            v_min = 0.0        
-            v_max = 360.0      
-            v_inc = 10.0       
+            plastic_cases = data.get("load_cases", {}).get("plastic", [])
 
-            try:
-                plastic_sweep_results = []
-                # Execute the iteration sweep
-                current_v = v_min
-                while current_v <= v_max:
-                    res = plastic_engine.solve(angle_v_deg=current_v, P_target=target_P)
-                    # Append the specific angle to the result dictionary
-                    res["V"] = current_v
-                    plastic_sweep_results.append(res)
-                    current_v += v_inc
-                
-                # Pass the aggregated list of dictionaries to the rendering module
-                render_plastic_results(plastic_sweep_results, target_P)
-                
-            except Exception as e:
-                st.error(f"Plastic Solver Error: {e}")
+            if not plastic_cases:
+                st.info("No plastic load cases configured.")
+
+            for case in plastic_cases:
+                case_id = case.get("id", "?")
+                case_name = case.get("name", "Unnamed")
+                v_inc = case.get("v_inc", 0.0)
+                v_min = case.get("v_min", 0.0)
+                v_max = case.get("v_max", 0.0)
+                target_P = case.get("P_target", 0.0)
+
+                with st.expander(f"Plastic load case {case_id}: {case_name}", expanded=False):
+                    if v_inc <= 0:
+                        st.error("Invalid load case: v_inc must be greater than 0.")
+                        continue
+                    if v_max < v_min:
+                        st.error("Invalid load case: v_max must be greater than or equal to v_min.")
+                        continue
+
+                    try:
+                        plastic_sweep_results = []
+                        current_v = v_min
+                        while current_v <= v_max:
+                            res = plastic_engine.solve(angle_v_deg=current_v, P_target=target_P)
+                            res["V"] = current_v
+                            plastic_sweep_results.append(res)
+                            current_v += v_inc
+
+                        render_plastic_results(plastic_sweep_results, target_P)
+
+                    except Exception as e:
+                        st.error(f"Plastic Solver Error: {e}")
 
     # 5. Background Task
     handle_autosave()
