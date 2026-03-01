@@ -1,3 +1,4 @@
+import copy
 import math
 
 import plotly.graph_objects as go
@@ -36,9 +37,9 @@ def _add_id_labels(fig, records, x_key, y_key, show, name):
 def render_geometry_plot():
     initialize_session_state()
     data = st.session_state.data
-    data["geometry"] = normalize_geometry_for_use(data["geometry"])
-    data["geometry"] = normalize_rebar_ids(data["geometry"])
-    geom = data["geometry"]
+    geom = copy.deepcopy(data["geometry"])
+    geom = normalize_geometry_for_use(geom)
+    geom = normalize_rebar_ids(geom)
     options = data.get("plot_options", {})
 
     fig = go.Figure()

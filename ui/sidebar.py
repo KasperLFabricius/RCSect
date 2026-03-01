@@ -17,21 +17,51 @@ from utils.data_io import (
 )
 
 
+GEOMETRY_EDITOR_BASE_KEYS = ["editor_outline", "editor_mild", "editor_pre"]
+
+
 def _seed_widget(key, value):
     if key not in st.session_state:
         st.session_state[key] = value
 
 
-def _sync_geometry_editor(editor_key, before_geometry, after_geometry):
-    if before_geometry != after_geometry:
-        st.session_state.data["geometry"] = after_geometry
-        st.session_state[editor_key] = pd.DataFrame(after_geometry) if isinstance(after_geometry, list) else after_geometry
-        st.rerun()
+def _reset_widget_keys(keys: list[str]) -> None:
+    for key in keys:
+        st.session_state.pop(key, None)
 
 
-def _clean_outline_rows(rows):
+def reset_geometry_editor_widgets(clear_void_keys: bool = True) -> None:
+    keys_to_clear = list(GEOMETRY_EDITOR_BASE_KEYS)
+    void_keys = list(st.session_state.get("void_editor_keys", []))
+    keys_to_clear.extend([f"editor_void_{k}" for k in void_keys])
+
+    # hygiene: clear orphaned void editor keys too
+    for key in list(st.session_state.keys()):
+        if key.startswith("editor_void_") and key not in keys_to_clear:
+            keys_to_clear.append(key)
+
+    _reset_widget_keys(keys_to_clear)
+
+    if clear_void_keys:
+        st.session_state["void_editor_keys"] = []
+
+
+def reset_load_case_editor_widgets() -> None:
+    _reset_widget_keys(["editor_load_cases_elastic", "editor_load_cases_plastic"])
+
+
+def _clean_point_rows(rows):
     cleaned = coerce_point_rows(rows)
     return [{"id": pt.get("id"), "x": pt["x"], "y": pt["y"]} for pt in cleaned]
+
+
+def _sync_both_rebar_widgets(geometry):
+    st.session_state["editor_mild"] = pd.DataFrame(
+        geometry.get("reinforcement_mild", []), columns=["id", "x", "y", "area"]
+    )
+    st.session_state["editor_pre"] = pd.DataFrame(
+        geometry.get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"]
+    )
 
 
 def render_sidebar():
@@ -50,7 +80,9 @@ def render_sidebar():
     settings["autosave_enabled"] = bool(st.session_state.autosave_enabled)
 
     _seed_widget("autosave_interval_seconds", int(settings.get("autosave_interval_seconds", 60)))
-    st.sidebar.number_input("Autosave interval (seconds)", min_value=5, max_value=600, step=5, key="autosave_interval_seconds")
+    st.sidebar.number_input(
+        "Autosave interval (seconds)", min_value=5, max_value=600, step=5, key="autosave_interval_seconds"
+    )
     settings["autosave_interval_seconds"] = int(st.session_state.autosave_interval_seconds)
 
     if st.session_state.get("last_autosave_timestamp"):
@@ -124,110 +156,147 @@ def _render_material_inputs():
 
 
 def _render_geometry_inputs():
-    geom = st.session_state.data["geometry"]
-    geom = normalize_geometry_for_use(geom)
-    st.session_state.data["geometry"] = geom
+    data = st.session_state.data
+    geom = normalize_geometry_for_use(data["geometry"])
+    data["geometry"] = geom
 
     if "void_editor_keys" not in st.session_state:
-        st.session_state.void_editor_keys = []
-    while len(st.session_state.void_editor_keys) < len(geom["concrete_voids"]):
+        st.session_state.void_editor_keys = [str(uuid.uuid4()) for _ in geom.get("concrete_voids", [])]
+
+    while len(st.session_state.void_editor_keys) < len(geom.get("concrete_voids", [])):
         st.session_state.void_editor_keys.append(str(uuid.uuid4()))
-    if len(st.session_state.void_editor_keys) > len(geom["concrete_voids"]):
-        st.session_state.void_editor_keys = st.session_state.void_editor_keys[: len(geom["concrete_voids"])]
+    if len(st.session_state.void_editor_keys) > len(geom.get("concrete_voids", [])):
+        st.session_state.void_editor_keys = st.session_state.void_editor_keys[: len(geom.get("concrete_voids", []))]
 
     st.write("**Concrete Outline (Clockwise)**")
     outline_key = "editor_outline"
     outline_records = sorted(geom.get("concrete_outline", []), key=lambda pt: pt["id"])
     _seed_widget(outline_key, pd.DataFrame(outline_records, columns=["id", "x", "y"]))
-    edited_outline = st.data_editor(st.session_state[outline_key], num_rows="dynamic", use_container_width=True, key=outline_key)
-    outline_rows = edited_outline.to_dict("records")
-    updated_geom = copy.deepcopy(geom)
-    updated_geom["concrete_outline"] = _clean_outline_rows(outline_rows)
-    normalized = validate_winding_constraints(normalize_point_ids(updated_geom))
-    before = geom.get("concrete_outline", [])
-    after = normalized.get("concrete_outline", [])
-    if before != after:
-        st.session_state.data["geometry"] = normalized
-        st.session_state[outline_key] = pd.DataFrame(after)
+    edited_outline = st.data_editor(
+        st.session_state[outline_key], num_rows="dynamic", use_container_width=True, key=outline_key
+    )
+
+    next_geom = copy.deepcopy(geom)
+    next_geom["concrete_outline"] = _clean_point_rows(edited_outline.to_dict("records"))
+    next_geom = validate_winding_constraints(normalize_point_ids(next_geom))
+    if next_geom != geom:
+        data["geometry"] = next_geom
+        st.session_state[outline_key] = pd.DataFrame(
+            sorted(next_geom.get("concrete_outline", []), key=lambda pt: pt["id"]), columns=["id", "x", "y"]
+        )
         st.rerun()
-    st.session_state.data["geometry"] = normalized
 
     st.write("**Concrete voids (Counterclockwise)**")
     left_col, right_col = st.columns(2)
+
     with left_col:
         if st.button("Load example section", use_container_width=True):
-            st.session_state.data["geometry"] = load_example_geometry()
-            st.session_state.pop("editor_outline", None)
+            reset_geometry_editor_widgets(clear_void_keys=True)
+            data["geometry"] = load_example_geometry()
+            data["geometry"] = normalize_geometry_for_use(data["geometry"])
+            st.session_state.void_editor_keys = [
+                str(uuid.uuid4()) for _ in data["geometry"].get("concrete_voids", [])
+            ]
             st.rerun()
+
     with right_col:
         if st.button("Reset geometry", use_container_width=True):
-            st.session_state.data["geometry"] = {"concrete_outline": [], "concrete_voids": [], "reinforcement_mild": [], "reinforcement_prestressed": []}
-            st.session_state.pop("editor_outline", None)
+            reset_geometry_editor_widgets(clear_void_keys=True)
+            data["geometry"] = {
+                "concrete_outline": [],
+                "concrete_voids": [],
+                "reinforcement_mild": [],
+                "reinforcement_prestressed": [],
+            }
+            st.session_state.void_editor_keys = []
             st.rerun()
 
     if st.button("Add void", key="add_void", use_container_width=True):
-        geom = st.session_state.data["geometry"]
-        geom["concrete_voids"].append([
-            {"id": 1, "x": -0.10, "y": -0.10},
-            {"id": 2, "x": 0.10, "y": -0.10},
-            {"id": 3, "x": 0.10, "y": 0.10},
-            {"id": 4, "x": -0.10, "y": 0.10},
-        ])
-        st.session_state.void_editor_keys.append(str(uuid.uuid4()))
-        st.session_state.data["geometry"] = normalize_geometry_for_use(geom)
+        data["geometry"].setdefault("concrete_voids", []).append(
+            [
+                {"id": 1, "x": -0.10, "y": -0.10},
+                {"id": 2, "x": 0.10, "y": -0.10},
+                {"id": 3, "x": 0.10, "y": 0.10},
+                {"id": 4, "x": -0.10, "y": 0.10},
+            ]
+        )
+        new_void_uuid = str(uuid.uuid4())
+        st.session_state.void_editor_keys.append(new_void_uuid)
+        _reset_widget_keys(["editor_outline", f"editor_void_{new_void_uuid}"])
+        data["geometry"] = normalize_geometry_for_use(data["geometry"])
         st.rerun()
 
-    for i, void in enumerate(st.session_state.data["geometry"].get("concrete_voids", [])):
+    for i, void in enumerate(data["geometry"].get("concrete_voids", [])):
+        void_uuid = st.session_state.void_editor_keys[i]
+        void_key = f"editor_void_{void_uuid}"
         with st.expander(f"Void {i + 1}", expanded=False):
             if st.button("Remove this void", key=f"remove_void_{i}", use_container_width=True):
-                st.session_state.data["geometry"]["concrete_voids"].pop(i)
-                st.session_state.void_editor_keys.pop(i)
+                data["geometry"]["concrete_voids"].pop(i)
+                removed_uuid = st.session_state.void_editor_keys.pop(i)
+                _reset_widget_keys(["editor_outline", f"editor_void_{removed_uuid}"])
+                data["geometry"] = normalize_geometry_for_use(data["geometry"])
                 st.rerun()
-            void_key = f"editor_void_{st.session_state.void_editor_keys[i]}"
+
             void_records = sorted(void, key=lambda pt: pt["id"])
             _seed_widget(void_key, pd.DataFrame(void_records, columns=["id", "x", "y"]))
-            edited_void = st.data_editor(st.session_state[void_key], num_rows="dynamic", use_container_width=True, key=void_key)
-            new_void = _clean_outline_rows(edited_void.to_dict("records"))
-            before_geom = copy.deepcopy(st.session_state.data["geometry"])
-            next_geom = copy.deepcopy(before_geom)
-            next_geom["concrete_voids"][i] = new_void
-            next_geom = validate_winding_constraints(normalize_point_ids(next_geom))
-            if before_geom != next_geom:
-                st.session_state.data["geometry"] = next_geom
-                st.session_state[void_key] = pd.DataFrame(next_geom["concrete_voids"][i])
+            edited_void = st.data_editor(
+                st.session_state[void_key], num_rows="dynamic", use_container_width=True, key=void_key
+            )
+
+            before = copy.deepcopy(data["geometry"])
+            candidate = copy.deepcopy(before)
+            candidate["concrete_voids"][i] = _clean_point_rows(edited_void.to_dict("records"))
+            candidate = validate_winding_constraints(normalize_point_ids(candidate))
+            if candidate != before:
+                data["geometry"] = candidate
+                st.session_state[void_key] = pd.DataFrame(
+                    sorted(candidate["concrete_voids"][i], key=lambda pt: pt["id"]), columns=["id", "x", "y"]
+                )
                 st.rerun()
 
     st.write("**Mild Steel (x, y, area mm²)**")
     mild_key = "editor_mild"
-    mild_records = st.session_state.data["geometry"].get("reinforcement_mild", [])
-    _seed_widget(mild_key, pd.DataFrame(mild_records, columns=["id", "x", "y", "area"]))
-    edited_mild = st.data_editor(st.session_state[mild_key], num_rows="dynamic", use_container_width=True, key=mild_key)
-    mild_clean = coerce_rebar_rows(edited_mild.to_dict("records"))
-    before_geom = copy.deepcopy(st.session_state.data["geometry"])
-    next_geom = copy.deepcopy(before_geom)
-    next_geom["reinforcement_mild"] = mild_clean
-    next_geom = normalize_rebar_ids(next_geom)
-    if before_geom != next_geom:
-        st.session_state.data["geometry"] = next_geom
-        st.session_state[mild_key] = pd.DataFrame(next_geom["reinforcement_mild"])
+    _seed_widget(
+        mild_key,
+        pd.DataFrame(data["geometry"].get("reinforcement_mild", []), columns=["id", "x", "y", "area"]),
+    )
+    edited_mild = st.data_editor(
+        st.session_state[mild_key], num_rows="dynamic", use_container_width=True, key=mild_key
+    )
+
+    before = copy.deepcopy(data["geometry"])
+    candidate = copy.deepcopy(before)
+    candidate["reinforcement_mild"] = coerce_rebar_rows(edited_mild.to_dict("records"))
+    candidate = normalize_rebar_ids(candidate)
+    if candidate != before:
+        data["geometry"] = candidate
+        _sync_both_rebar_widgets(candidate)
         st.rerun()
 
     st.write("**Prestressed Steel (x, y, area mm²)**")
     pre_key = "editor_pre"
-    pre_records = st.session_state.data["geometry"].get("reinforcement_prestressed", [])
-    _seed_widget(pre_key, pd.DataFrame(pre_records, columns=["id", "x", "y", "area", "eps0"]))
-    edited_pre = st.data_editor(st.session_state[pre_key], num_rows="dynamic", use_container_width=True, key=pre_key)
-    pre_clean = coerce_rebar_rows(edited_pre.to_dict("records"), include_eps0=True)
-    before_geom = copy.deepcopy(st.session_state.data["geometry"])
-    next_geom = copy.deepcopy(before_geom)
-    next_geom["reinforcement_prestressed"] = pre_clean
-    next_geom = normalize_rebar_ids(next_geom)
-    if before_geom != next_geom:
-        st.session_state.data["geometry"] = next_geom
-        st.session_state[pre_key] = pd.DataFrame(next_geom["reinforcement_prestressed"])
+    _seed_widget(
+        pre_key,
+        pd.DataFrame(
+            data["geometry"].get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"]
+        ),
+    )
+    edited_pre = st.data_editor(
+        st.session_state[pre_key], num_rows="dynamic", use_container_width=True, key=pre_key
+    )
+
+    before = copy.deepcopy(data["geometry"])
+    candidate = copy.deepcopy(before)
+    candidate["reinforcement_prestressed"] = coerce_rebar_rows(
+        edited_pre.to_dict("records"), include_eps0=True
+    )
+    candidate = normalize_rebar_ids(candidate)
+    if candidate != before:
+        data["geometry"] = candidate
+        _sync_both_rebar_widgets(candidate)
         st.rerun()
 
-    plot_options = st.session_state.data["plot_options"]
+    plot_options = data["plot_options"]
     with st.expander("Plot options", expanded=False):
         for key, label in [
             ("show_concrete_point_ids", "Show concrete point IDs"),
@@ -240,7 +309,7 @@ def _render_geometry_inputs():
             plot_options[key] = bool(st.session_state[key])
 
     with st.expander("Geometry validation", expanded=True):
-        topo = validate_geometry_topology(st.session_state.data["geometry"])
+        topo = validate_geometry_topology(data["geometry"])
         if not topo["errors"] and not topo["warnings"]:
             st.success("No topology issues detected.")
         for error in topo["errors"]:
@@ -271,34 +340,78 @@ def _render_load_case_inputs():
 
     if mode in ["Elastic", "Both"]:
         st.write("**Elastic load cases**")
-        _seed_widget("editor_load_cases_elastic", pd.DataFrame(data["load_cases"]["elastic"], columns=elastic_columns))
-        edited_elastic = st.data_editor(st.session_state["editor_load_cases_elastic"], num_rows="dynamic", use_container_width=True, key="editor_load_cases_elastic")
+        _seed_widget(
+            "editor_load_cases_elastic",
+            pd.DataFrame(data["load_cases"].get("elastic", []), columns=elastic_columns),
+        )
+        edited_elastic = st.data_editor(
+            st.session_state["editor_load_cases_elastic"],
+            num_rows="dynamic",
+            use_container_width=True,
+            key="editor_load_cases_elastic",
+        )
         data["load_cases"]["elastic"] = edited_elastic.to_dict("records")
+
         add_col, rm_col = st.columns(2)
         with add_col:
             if st.button("Add elastic load case", key="add_elastic_case", use_container_width=True):
                 next_id = _get_next_load_case_id(data["load_cases"]["elastic"])
-                data["load_cases"]["elastic"].append({"id": next_id, "name": f"Load case {next_id}", "P_l": 0.0, "Mx_l": 0.0, "My_l": 0.0, "n_l": 1.0, "P_s": 0.0, "Mx_s": 0.0, "My_s": 0.0, "n_s": 1.0})
+                data["load_cases"]["elastic"].append(
+                    {
+                        "id": next_id,
+                        "name": f"Load case {next_id}",
+                        "P_l": 0.0,
+                        "Mx_l": 0.0,
+                        "My_l": 0.0,
+                        "n_l": 1.0,
+                        "P_s": 0.0,
+                        "Mx_s": 0.0,
+                        "My_s": 0.0,
+                        "n_s": 1.0,
+                    }
+                )
+                reset_load_case_editor_widgets()
                 st.rerun()
         with rm_col:
             if st.button("Remove last elastic load case", key="remove_elastic_case", use_container_width=True):
                 if data["load_cases"]["elastic"]:
                     data["load_cases"]["elastic"].pop()
+                    reset_load_case_editor_widgets()
                     st.rerun()
 
     if mode in ["Plastic", "Both"]:
         st.write("**Plastic load cases**")
-        _seed_widget("editor_load_cases_plastic", pd.DataFrame(data["load_cases"]["plastic"], columns=plastic_columns))
-        edited_plastic = st.data_editor(st.session_state["editor_load_cases_plastic"], num_rows="dynamic", use_container_width=True, key="editor_load_cases_plastic")
+        _seed_widget(
+            "editor_load_cases_plastic",
+            pd.DataFrame(data["load_cases"].get("plastic", []), columns=plastic_columns),
+        )
+        edited_plastic = st.data_editor(
+            st.session_state["editor_load_cases_plastic"],
+            num_rows="dynamic",
+            use_container_width=True,
+            key="editor_load_cases_plastic",
+        )
         data["load_cases"]["plastic"] = edited_plastic.to_dict("records")
+
         add_col, rm_col = st.columns(2)
         with add_col:
             if st.button("Add plastic load case", key="add_plastic_case", use_container_width=True):
                 next_id = _get_next_load_case_id(data["load_cases"]["plastic"])
-                data["load_cases"]["plastic"].append({"id": next_id, "name": f"Load case {next_id}", "P_target": 0.0, "v_min": 0.0, "v_max": 360.0, "v_inc": 10.0})
+                data["load_cases"]["plastic"].append(
+                    {
+                        "id": next_id,
+                        "name": f"Load case {next_id}",
+                        "P_target": 0.0,
+                        "v_min": 0.0,
+                        "v_max": 360.0,
+                        "v_inc": 10.0,
+                    }
+                )
+                reset_load_case_editor_widgets()
                 st.rerun()
         with rm_col:
             if st.button("Remove last plastic load case", key="remove_plastic_case", use_container_width=True):
                 if data["load_cases"]["plastic"]:
                     data["load_cases"]["plastic"].pop()
+                    reset_load_case_editor_widgets()
                     st.rerun()
