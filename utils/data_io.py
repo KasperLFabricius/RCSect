@@ -18,6 +18,10 @@ def initialize_session_state():
         else:
             st.session_state.data = _get_default_schema()
 
+        st.session_state.data["geometry"] = validate_winding_constraints(
+            st.session_state.data["geometry"]
+        )
+
 def _get_default_schema():
     """Returns the full foundational JSON structure with default values."""
     return {
@@ -79,6 +83,9 @@ def handle_autosave():
     interval = st.session_state.data["analysis_settings"].get("autosave_interval_seconds", 60)
     
     if current_time - st.session_state.last_save_time > interval:
+        st.session_state.data["geometry"] = validate_winding_constraints(
+            st.session_state.data["geometry"]
+        )
         with open(AUTOSAVE_FILE, 'w') as f:
             json.dump(st.session_state.data, f, indent=4)
         st.session_state.last_save_time = current_time
