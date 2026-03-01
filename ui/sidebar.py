@@ -1,7 +1,11 @@
 import streamlit as st
 import pandas as pd
 import uuid
-from utils.data_io import initialize_session_state, validate_winding_constraints
+from utils.data_io import (
+    initialize_session_state,
+    validate_geometry_topology,
+    validate_winding_constraints,
+)
 
 def render_sidebar():
     """Renders the sidebar interface for global settings, materials, and geometry."""
@@ -135,6 +139,15 @@ def _render_geometry_inputs():
             st.session_state.data["geometry"] = validate_winding_constraints(
                 st.session_state.data["geometry"]
             )
+
+    with st.expander("Geometry validation", expanded=True):
+        topo = validate_geometry_topology(st.session_state.data["geometry"])
+        if not topo["errors"] and not topo["warnings"]:
+            st.success("No topology issues detected.")
+        for error in topo["errors"]:
+            st.error(error)
+        for warning in topo["warnings"]:
+            st.warning(warning)
 
     st.write("**Mild Steel (x, y, area mm²)**")
     df_mild = pd.DataFrame(geom.get("reinforcement_mild", [{"id": 1, "x": 0.0, "y": 0.0, "area": 0.0}]))
