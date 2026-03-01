@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 
 # Import all modular components we built
-from utils.data_io import initialize_session_state, handle_autosave
+from utils.data_io import initialize_session_state, handle_autosave, normalize_geometry_for_use
 from ui.sidebar import render_sidebar
 from ui.canvas import render_geometry_plot
 from ui.results import render_elastic_results, render_plastic_results
@@ -70,7 +70,10 @@ def main():
     render_sidebar()
     
     data = st.session_state.data
+    data["geometry"] = normalize_geometry_for_use(data["geometry"])
     mode = data["analysis_settings"]["mode"]
+
+    handle_autosave()
 
     # 2. Layout
     col_canvas, col_results = st.columns([5, 7])
@@ -158,9 +161,6 @@ def main():
 
                     except Exception as e:
                         st.error(f"Plastic Solver Error: {e}")
-
-    # 5. Background Task
-    handle_autosave()
 
 if __name__ == "__main__":
     main()
