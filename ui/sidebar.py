@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
+from utils.data_io import initialize_session_state
 
 def render_sidebar():
     """Renders the sidebar interface for global settings, materials, and geometry."""
-    init_default_state()
+    initialize_session_state()
     
     st.sidebar.header("Global Settings")
     
