@@ -1,5 +1,7 @@
 import numpy as np
 from scipy.optimize import brentq
+from shapely.geometry import MultiPolygon, Polygon
+from shapely.ops import triangulate
 from core.geometry import split_compression_zone
 import warnings
 
@@ -228,9 +230,93 @@ class PlasticSolver:
 
     def _integrate_parabola(self, polygon, y_na, kappa):
         """
-        Exact integration of the parabolic stress block.
-        Returns Force in kN, moments Mx, My, and geometric centroid cx, cy.
+        Numerically integrates the EC2 parabolic compression block over a polygon.
+
+        Returns:
+            F (kN): negative for compression
+            Mx (kNm): accumulated with Mx += force * y
+            My (kNm): accumulated with My += force * x
+            cx, cy (m): stress-resultant centroid coordinates
         """
-        # Polygon slicing algorithms execute here
-        F, Mx, My, cx, cy = 0.0, 0.0, 0.0, 0.0, 0.0 
+        if kappa <= 0:
+            raise ValueError("Parabolic integration requires kappa > 0.")
+
+        if polygon is None or polygon.is_empty:
+            return 0.0, 0.0, 0.0, 0.0, 0.0
+
+        if isinstance(polygon, Polygon):
+            polygon_parts = [polygon]
+        elif isinstance(polygon, MultiPolygon):
+            polygon_parts = [part for part in polygon.geoms if not part.is_empty]
+        else:
+            polygon_parts = [
+                geom for geom in getattr(polygon, "geoms", [])
+                if isinstance(geom, (Polygon, MultiPolygon)) and not geom.is_empty
+            ]
+
+        # 6-point Dunavant rule (degree 4) on reference triangle.
+        tri_qp = [
+            (0.445948490915965, 0.445948490915965, 0.111690794839005),
+            (0.445948490915965, 0.108103018168070, 0.111690794839005),
+            (0.108103018168070, 0.445948490915965, 0.111690794839005),
+            (0.091576213509771, 0.091576213509771, 0.054975871827661),
+            (0.091576213509771, 0.816847572980459, 0.054975871827661),
+            (0.816847572980459, 0.091576213509771, 0.054975871827661),
+        ]
+
+        I0, Ix, Iy = 0.0, 0.0, 0.0
+
+        def integrate_triangle(triangle: Polygon):
+            nonlocal I0, Ix, Iy
+            coords = list(triangle.exterior.coords)
+            if len(coords) < 4:
+                return
+            (x1, y1), (x2, y2), (x3, y3) = coords[0], coords[1], coords[2]
+
+            det_j = abs((x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1))
+            if det_j <= 0.0:
+                return
+
+            for l1, l2, weight in tri_qp:
+                l3 = 1.0 - l1 - l2
+                x = l1 * x1 + l2 * x2 + l3 * x3
+                y = l1 * y1 + l2 * y2 + l3 * y3
+                eps_c = kappa * (y - y_na)
+                sigma = self.concrete.stress(eps_c)
+                if sigma <= 0.0:
+                    continue
+
+                dA = det_j * weight
+                I0 += sigma * dA
+                Ix += sigma * x * dA
+                Iy += sigma * y * dA
+
+        for part in polygon_parts:
+            for tri in triangulate(part):
+                inside = tri.intersection(part)
+                if inside.is_empty:
+                    continue
+
+                if isinstance(inside, Polygon):
+                    for sub_tri in triangulate(inside):
+                        clipped = sub_tri.intersection(inside)
+                        if isinstance(clipped, Polygon) and not clipped.is_empty:
+                            integrate_triangle(clipped)
+                elif isinstance(inside, MultiPolygon):
+                    for inside_part in inside.geoms:
+                        if inside_part.is_empty:
+                            continue
+                        for sub_tri in triangulate(inside_part):
+                            clipped = sub_tri.intersection(inside_part)
+                            if isinstance(clipped, Polygon) and not clipped.is_empty:
+                                integrate_triangle(clipped)
+
+        if I0 <= 1e-16:
+            return 0.0, 0.0, 0.0, 0.0, 0.0
+
+        F = -1000.0 * I0
+        My = -1000.0 * Ix
+        Mx = -1000.0 * Iy
+        cx = Ix / I0
+        cy = Iy / I0
         return F, Mx, My, cx, cy
