@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils.data_io import initialize_session_state
+from utils.data_io import initialize_session_state, validate_winding_constraints
 
 def render_sidebar():
     """Renders the sidebar interface for global settings, materials, and geometry."""
@@ -74,6 +74,9 @@ def _render_geometry_inputs():
         key="editor_outline"
     )
     geom["concrete_outline"] = edited_outline.to_dict('records')
+    st.session_state.data["geometry"] = validate_winding_constraints(
+        st.session_state.data["geometry"]
+    )
 
     st.write("**Mild Steel (x, y, area mm²)**")
     df_mild = pd.DataFrame(geom.get("reinforcement_mild", [{"id": 1, "x": 0.0, "y": 0.0, "area": 0.0}]))
