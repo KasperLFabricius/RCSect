@@ -244,16 +244,6 @@ class PlasticSolver:
         if polygon is None or polygon.is_empty:
             return 0.0, 0.0, 0.0, 0.0, 0.0
 
-        if isinstance(polygon, Polygon):
-            polygon_parts = [polygon]
-        elif isinstance(polygon, MultiPolygon):
-            polygon_parts = [part for part in polygon.geoms if not part.is_empty]
-        else:
-            polygon_parts = [
-                geom for geom in getattr(polygon, "geoms", [])
-                if isinstance(geom, (Polygon, MultiPolygon)) and not geom.is_empty
-            ]
-
         # 6-point Dunavant rule (degree 4) on reference triangle.
         tri_qp = [
             (0.445948490915965, 0.445948490915965, 0.111690794839005),
@@ -268,9 +258,11 @@ class PlasticSolver:
 
         def integrate_triangle(triangle: Polygon):
             nonlocal I0, Ix, Iy
-            coords = list(triangle.exterior.coords)
-            if len(coords) < 4:
+            coords = list(triangle.exterior.coords)[:-1]
+            if len(coords) != 3:
+                integrate_geom(triangle)
                 return
+
             (x1, y1), (x2, y2), (x3, y3) = coords[0], coords[1], coords[2]
 
             det_j = abs((x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1))
@@ -291,25 +283,31 @@ class PlasticSolver:
                 Ix += sigma * x * dA
                 Iy += sigma * y * dA
 
-        for part in polygon_parts:
-            for tri in triangulate(part):
-                inside = tri.intersection(part)
-                if inside.is_empty:
-                    continue
+        def integrate_geom(geom):
+            if geom is None or geom.is_empty:
+                return
 
-                if isinstance(inside, Polygon):
-                    for sub_tri in triangulate(inside):
-                        clipped = sub_tri.intersection(inside)
-                        if isinstance(clipped, Polygon) and not clipped.is_empty:
-                            integrate_triangle(clipped)
-                elif isinstance(inside, MultiPolygon):
-                    for inside_part in inside.geoms:
-                        if inside_part.is_empty:
-                            continue
-                        for sub_tri in triangulate(inside_part):
-                            clipped = sub_tri.intersection(inside_part)
-                            if isinstance(clipped, Polygon) and not clipped.is_empty:
-                                integrate_triangle(clipped)
+            if isinstance(geom, MultiPolygon):
+                for part in geom.geoms:
+                    if not part.is_empty:
+                        integrate_geom(part)
+                return
+
+            if isinstance(geom, Polygon):
+                coords = list(geom.exterior.coords)[:-1]
+                if len(coords) == 3:
+                    integrate_triangle(geom)
+                    return
+
+                for tri in triangulate(geom):
+                    tri_clip = tri.intersection(geom)
+                    integrate_geom(tri_clip)
+                return
+
+            for sub_geom in getattr(geom, "geoms", []):
+                integrate_geom(sub_geom)
+
+        integrate_geom(polygon)
 
         if I0 <= 1e-16:
             return 0.0, 0.0, 0.0, 0.0, 0.0
