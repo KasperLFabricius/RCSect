@@ -38,7 +38,7 @@ def render_elastic_results(elastic_output: dict):
         
     if table_data:
         df_elastic = pd.DataFrame(table_data)
-        st.dataframe(df_elastic.style.format(precision=0), use_container_width=True)
+        st.dataframe(df_elastic.style.format(precision=0), width="stretch")
     else:
         st.info("No reinforcement data available.")
 
@@ -108,7 +108,7 @@ def render_plastic_results(plastic_output: list, target_P: float):
         height=500
     )
     
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     # 2. Render the Detailed Iteration Table
     st.markdown("#### Angular Sweep Output Data")
@@ -120,4 +120,4 @@ def render_plastic_results(plastic_output: list, target_P: float):
         "V (deg)": "{:.1f}",
         "Depth y_na (m)": "{:.3f}",
         "Curvature (1/m)": "{:.6f}"
-    }), use_container_width=True, height=400)
+    }), width="stretch", height=400)
