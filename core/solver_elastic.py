@@ -70,7 +70,6 @@ def integrate_concrete_zone(geom, eps0, kx, ky, Ec_eff_kN_m2):
             for tri in triangulate(g):
                 tri_clip = tri.intersection(g)
                 integrate_geom(tri_clip)
-            return
 
         for part in getattr(g, "geoms", []):
             integrate_geom(part)
@@ -231,7 +230,6 @@ class ElasticSolver:
                 for tri in triangulate(g):
                     tri_clip = tri.intersection(g)
                     integrate_geom(tri_clip)
-                return
 
             for part in getattr(g, "geoms", []):
                 integrate_geom(part)
