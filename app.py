@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 
 # Import all modular components we built
-from utils.data_io import initialize_session_state, handle_autosave
+from utils.data_io import initialize_session_state, handle_autosave, normalize_geometry_for_use
 from ui.sidebar import render_sidebar
 from ui.canvas import render_geometry_plot
 from ui.results import render_elastic_results, render_plastic_results
@@ -70,6 +70,7 @@ def main():
     render_sidebar()
     
     data = st.session_state.data
+    data["geometry"] = normalize_geometry_for_use(data["geometry"])
     mode = data["analysis_settings"]["mode"]
 
     # 2. Layout
@@ -83,15 +84,17 @@ def main():
         st.subheader("Analysis Results")
         
         # Verify geometry exists before attempting to solve
-        if not data["geometry"].get("concrete_outline"):
+        can_run_analysis = bool(data["geometry"].get("concrete_outline"))
+        if not can_run_analysis:
             st.warning("Please define the concrete geometry to run the analysis.")
-            return
-            
-        # Build core engine instances
-        cs, conc, mild, pre = build_computational_models(data)
+
+        cs = conc = mild = pre = None
+        if can_run_analysis:
+            # Build core engine instances
+            cs, conc, mild, pre = build_computational_models(data)
 
         # 3. Execution: Elastic Mode
-        if mode in ["Elastic", "Both"]:
+        if can_run_analysis and mode in ["Elastic", "Both"]:
             st.write("### Elastic Analysis")
             elastic_engine = ElasticSolver(cross_section=cs, E_c=33000.0, E_s=200000.0)
             elastic_cases = data.get("load_cases", {}).get("elastic", [])
@@ -121,7 +124,7 @@ def main():
         st.divider()
 
         # 4. Execution: Plastic Mode (The Angular Sweep)
-        if mode in ["Plastic", "Both"]:
+        if can_run_analysis and mode in ["Plastic", "Both"]:
             st.write("### Plastic Analysis")
             plastic_engine = PlasticSolver(cs, conc, mild, pre)
             plastic_cases = data.get("load_cases", {}).get("plastic", [])
@@ -159,7 +162,7 @@ def main():
                     except Exception as e:
                         st.error(f"Plastic Solver Error: {e}")
 
-    # 5. Background Task
+    # 5. Background autosave (after sidebar writeback/render flow)
     handle_autosave()
 
 if __name__ == "__main__":
