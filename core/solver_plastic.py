@@ -1,5 +1,7 @@
 import numpy as np
 from scipy.optimize import brentq
+from shapely.geometry import MultiPolygon, Polygon
+from shapely.ops import triangulate
 from core.geometry import split_compression_zone
 import warnings
 
@@ -228,9 +230,91 @@ class PlasticSolver:
 
     def _integrate_parabola(self, polygon, y_na, kappa):
         """
-        Exact integration of the parabolic stress block.
-        Returns Force in kN, moments Mx, My, and geometric centroid cx, cy.
+        Numerically integrates the EC2 parabolic compression block over a polygon.
+
+        Returns:
+            F (kN): negative for compression
+            Mx (kNm): accumulated with Mx += force * y
+            My (kNm): accumulated with My += force * x
+            cx, cy (m): stress-resultant centroid coordinates
         """
-        # Polygon slicing algorithms execute here
-        F, Mx, My, cx, cy = 0.0, 0.0, 0.0, 0.0, 0.0 
+        if kappa <= 0:
+            raise ValueError("Parabolic integration requires kappa > 0.")
+
+        if polygon is None or polygon.is_empty:
+            return 0.0, 0.0, 0.0, 0.0, 0.0
+
+        # 6-point Dunavant rule (degree 4) on reference triangle.
+        tri_qp = [
+            (0.445948490915965, 0.445948490915965, 0.111690794839005),
+            (0.445948490915965, 0.108103018168070, 0.111690794839005),
+            (0.108103018168070, 0.445948490915965, 0.111690794839005),
+            (0.091576213509771, 0.091576213509771, 0.054975871827661),
+            (0.091576213509771, 0.816847572980459, 0.054975871827661),
+            (0.816847572980459, 0.091576213509771, 0.054975871827661),
+        ]
+
+        I0, Ix, Iy = 0.0, 0.0, 0.0
+
+        def integrate_triangle(triangle: Polygon):
+            nonlocal I0, Ix, Iy
+            coords = list(triangle.exterior.coords)[:-1]
+            if len(coords) != 3:
+                integrate_geom(triangle)
+                return
+
+            (x1, y1), (x2, y2), (x3, y3) = coords[0], coords[1], coords[2]
+
+            det_j = abs((x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1))
+            if det_j <= 0.0:
+                return
+
+            for l1, l2, weight in tri_qp:
+                l3 = 1.0 - l1 - l2
+                x = l1 * x1 + l2 * x2 + l3 * x3
+                y = l1 * y1 + l2 * y2 + l3 * y3
+                eps_c = kappa * (y - y_na)
+                sigma = self.concrete.stress(eps_c)
+                if sigma <= 0.0:
+                    continue
+
+                dA = det_j * weight
+                I0 += sigma * dA
+                Ix += sigma * x * dA
+                Iy += sigma * y * dA
+
+        def integrate_geom(geom):
+            if geom is None or geom.is_empty:
+                return
+
+            if isinstance(geom, MultiPolygon):
+                for part in geom.geoms:
+                    if not part.is_empty:
+                        integrate_geom(part)
+                return
+
+            if isinstance(geom, Polygon):
+                coords = list(geom.exterior.coords)[:-1]
+                if len(coords) == 3:
+                    integrate_triangle(geom)
+                    return
+
+                for tri in triangulate(geom):
+                    tri_clip = tri.intersection(geom)
+                    integrate_geom(tri_clip)
+                return
+
+            for sub_geom in getattr(geom, "geoms", []):
+                integrate_geom(sub_geom)
+
+        integrate_geom(polygon)
+
+        if I0 <= 1e-16:
+            return 0.0, 0.0, 0.0, 0.0, 0.0
+
+        F = -1000.0 * I0
+        My = -1000.0 * Ix
+        Mx = -1000.0 * Iy
+        cx = Ix / I0
+        cy = Iy / I0
         return F, Mx, My, cx, cy
