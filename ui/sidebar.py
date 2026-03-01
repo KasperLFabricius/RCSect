@@ -32,6 +32,8 @@ def render_sidebar():
     with tab_geom:
         _render_geometry_inputs()
 
+    _render_load_case_inputs()
+
     st.sidebar.divider()
     
     # File I/O Placeholders
@@ -168,3 +170,108 @@ def _render_geometry_inputs():
             st.error(error)
         for warning in topo["warnings"]:
             st.warning(warning)
+
+
+def _render_load_case_inputs():
+    """Renders editable elastic/plastic load case tables."""
+    data = st.session_state.data
+    mode = data["analysis_settings"]["mode"]
+
+    if "load_cases" not in data or not isinstance(data["load_cases"], dict):
+        data["load_cases"] = {"elastic": [], "plastic": []}
+
+    data["load_cases"].setdefault("elastic", [])
+    data["load_cases"].setdefault("plastic", [])
+
+    with st.sidebar.expander("Load cases", expanded=False):
+        if mode in ["Elastic", "Both"]:
+            st.write("**Elastic load cases**")
+            df_elastic = pd.DataFrame(
+                data["load_cases"]["elastic"]
+                or [{
+                    "id": 1,
+                    "name": "Load case 1",
+                    "P_l": 0.0,
+                    "Mx_l": 0.0,
+                    "My_l": 0.0,
+                    "n_l": 1.0,
+                    "P_s": 0.0,
+                    "Mx_s": 0.0,
+                    "My_s": 0.0,
+                    "n_s": 1.0,
+                }]
+            )
+            edited_elastic = st.data_editor(
+                df_elastic,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="editor_load_cases_elastic",
+            )
+            data["load_cases"]["elastic"] = edited_elastic.to_dict("records")
+
+            add_elastic_col, remove_elastic_col = st.columns(2)
+            with add_elastic_col:
+                if st.button("Add load case", key="add_elastic_case", use_container_width=True):
+                    elastic_cases = data["load_cases"]["elastic"]
+                    next_id = max((int(case.get("id", 0)) for case in elastic_cases), default=0) + 1
+                    elastic_cases.append({
+                        "id": next_id,
+                        "name": f"Load case {next_id}",
+                        "P_l": 0.0,
+                        "Mx_l": 0.0,
+                        "My_l": 0.0,
+                        "n_l": 1.0,
+                        "P_s": 0.0,
+                        "Mx_s": 0.0,
+                        "My_s": 0.0,
+                        "n_s": 1.0,
+                    })
+                    st.rerun()
+            with remove_elastic_col:
+                if st.button("Remove last load case", key="remove_elastic_case", use_container_width=True):
+                    elastic_cases = data["load_cases"]["elastic"]
+                    if elastic_cases:
+                        elastic_cases.pop()
+                        st.rerun()
+
+        if mode in ["Plastic", "Both"]:
+            st.write("**Plastic load cases**")
+            df_plastic = pd.DataFrame(
+                data["load_cases"]["plastic"]
+                or [{
+                    "id": 1,
+                    "name": "Load case 1",
+                    "P_target": 0.0,
+                    "v_min": 0.0,
+                    "v_max": 360.0,
+                    "v_inc": 10.0,
+                }]
+            )
+            edited_plastic = st.data_editor(
+                df_plastic,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="editor_load_cases_plastic",
+            )
+            data["load_cases"]["plastic"] = edited_plastic.to_dict("records")
+
+            add_plastic_col, remove_plastic_col = st.columns(2)
+            with add_plastic_col:
+                if st.button("Add load case", key="add_plastic_case", use_container_width=True):
+                    plastic_cases = data["load_cases"]["plastic"]
+                    next_id = max((int(case.get("id", 0)) for case in plastic_cases), default=0) + 1
+                    plastic_cases.append({
+                        "id": next_id,
+                        "name": f"Load case {next_id}",
+                        "P_target": 0.0,
+                        "v_min": 0.0,
+                        "v_max": 360.0,
+                        "v_inc": 10.0,
+                    })
+                    st.rerun()
+            with remove_plastic_col:
+                if st.button("Remove last load case", key="remove_plastic_case", use_container_width=True):
+                    plastic_cases = data["load_cases"]["plastic"]
+                    if plastic_cases:
+                        plastic_cases.pop()
+                        st.rerun()

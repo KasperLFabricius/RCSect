@@ -22,6 +22,9 @@ def initialize_session_state():
         st.session_state.data["geometry"] = validate_winding_constraints(
             st.session_state.data["geometry"]
         )
+        st.session_state.data["load_cases"] = _normalize_load_cases(
+            st.session_state.data.get("load_cases")
+        )
 
 def _get_default_schema():
     """Returns the full foundational JSON structure with default values."""
@@ -69,8 +72,49 @@ def _get_default_schema():
                 {"id": 30, "x": 0.00, "y": -0.54, "area": 1016.0}
             ]
         },
-        "load_cases": []
+        "load_cases": {
+            "elastic": [
+                {
+                    "id": 1,
+                    "name": "Default elastic case",
+                    "P_l": 408.98,
+                    "Mx_l": -49.87,
+                    "My_l": 0.0,
+                    "n_l": 22.93,
+                    "P_s": -5.45,
+                    "Mx_s": -36.12,
+                    "My_s": 0.0,
+                    "n_s": 5.733,
+                }
+            ],
+            "plastic": [
+                {
+                    "id": 1,
+                    "name": "Default plastic case",
+                    "P_target": 1976.0,
+                    "v_min": 0.0,
+                    "v_max": 360.0,
+                    "v_inc": 10.0,
+                }
+            ],
+        }
     }
+
+def _normalize_load_cases(load_cases):
+    """Ensures load case storage uses the expected dict-with-lists schema."""
+    defaults = _get_default_schema()["load_cases"]
+    if not isinstance(load_cases, dict):
+        return defaults
+
+    elastic = load_cases.get("elastic")
+    plastic = load_cases.get("plastic")
+    if not isinstance(elastic, list):
+        elastic = defaults["elastic"]
+    if not isinstance(plastic, list):
+        plastic = defaults["plastic"]
+
+    return {"elastic": elastic, "plastic": plastic}
+
 
 def handle_autosave():
     """
