@@ -2,7 +2,8 @@ import json
 import os
 import time
 import streamlit as st
-from shapely.geometry import LinearRing
+from shapely.geometry import LinearRing, Point, Polygon
+from shapely.validation import explain_validity
 
 AUTOSAVE_FILE = "rcsect_autosave.json"
 
@@ -113,3 +114,91 @@ def validate_winding_constraints(geometry_data):
                 # Reverse to enforce counterclockwise
                 void.reverse()
     return geometry_data
+
+
+def validate_geometry_topology(geometry_data):
+    """Validates geometry topology and returns actionable errors/warnings."""
+    result = {"errors": [], "warnings": []}
+
+    outline_pts = geometry_data.get("concrete_outline", [])
+    if len(outline_pts) < 3:
+        result["warnings"].append(
+            "Outline has fewer than 3 points; add at least 3 points to define a valid polygon."
+        )
+        return result
+
+    outer = Polygon([(pt["x"], pt["y"]) for pt in outline_pts])
+    if not outer.is_valid or outer.area <= 0:
+        validity = explain_validity(outer)
+        result["errors"].append(
+            f"Outline is invalid ({validity}); fix self-intersections/duplicate points and ensure non-zero area."
+        )
+
+    void_polys = []
+    for idx, void_pts in enumerate(geometry_data.get("concrete_voids", []), start=1):
+        if len(void_pts) < 3:
+            result["warnings"].append(
+                f"Void {idx} has fewer than 3 points; add points or remove this void."
+            )
+            void_polys.append(None)
+            continue
+
+        void_poly = Polygon([(pt["x"], pt["y"]) for pt in void_pts])
+        void_polys.append(void_poly)
+
+        if not void_poly.is_valid or void_poly.area <= 0:
+            validity = explain_validity(void_poly)
+            result["errors"].append(
+                f"Void {idx} is invalid ({validity}); fix self-intersections/duplicate points and ensure non-zero area."
+            )
+
+        if not outer.contains(void_poly):
+            result["errors"].append(
+                f"Void {idx} is not fully inside the outline; move it fully inside the concrete boundary."
+            )
+
+        if outer.touches(void_poly):
+            result["errors"].append(
+                f"Void {idx} intersects outer boundary; move it fully inside the outline with clear offset."
+            )
+
+    for i in range(len(void_polys)):
+        if void_polys[i] is None:
+            continue
+        for j in range(i + 1, len(void_polys)):
+            if void_polys[j] is None:
+                continue
+            if void_polys[i].intersects(void_polys[j]):
+                result["errors"].append(
+                    f"Void {i + 1} intersects Void {j + 1}; separate them so they do not touch or overlap."
+                )
+
+    for idx, bar in enumerate(geometry_data.get("reinforcement_mild", []), start=1):
+        point = Point(bar["x"], bar["y"])
+        if not outer.contains(point):
+            result["warnings"].append(
+                f"Mild reinforcement bar {idx} is outside the outline; move it inside the concrete polygon."
+            )
+            continue
+        for void_idx, void_poly in enumerate(void_polys, start=1):
+            if void_poly is not None and (void_poly.contains(point) or void_poly.touches(point)):
+                result["warnings"].append(
+                    f"Mild reinforcement bar {idx} lies in Void {void_idx}; relocate it to solid concrete."
+                )
+                break
+
+    for idx, bar in enumerate(geometry_data.get("reinforcement_prestressed", []), start=1):
+        point = Point(bar["x"], bar["y"])
+        if not outer.contains(point):
+            result["warnings"].append(
+                f"Prestressed reinforcement bar {idx} is outside the outline; move it inside the concrete polygon."
+            )
+            continue
+        for void_idx, void_poly in enumerate(void_polys, start=1):
+            if void_poly is not None and (void_poly.contains(point) or void_poly.touches(point)):
+                result["warnings"].append(
+                    f"Prestressed reinforcement bar {idx} lies in Void {void_idx}; relocate it to solid concrete."
+                )
+                break
+
+    return result
