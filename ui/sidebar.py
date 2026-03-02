@@ -294,8 +294,8 @@ def _render_geometry_inputs():
 
     with left_col:
         if st.button("Load example section", width="stretch"):
+            reset_geometry_editor_widgets(clear_void_keys=True)
             data["geometry"] = load_example_geometry()
-            data["geometry"] = normalize_geometry_for_use(data["geometry"])
             _rebuild_void_editor_keys_from_geometry()
             st.session_state.grid_versions = {"outline": st.session_state.get("grid_versions", {}).get("outline", 0) + 1}
             _ensure_grid_versions()
@@ -303,6 +303,7 @@ def _render_geometry_inputs():
 
     with right_col:
         if st.button("Reset geometry", width="stretch"):
+            reset_geometry_editor_widgets(clear_void_keys=True)
             data["geometry"] = {
                 "concrete_outline": [],
                 "concrete_voids": [],

@@ -113,8 +113,10 @@ def _compute_results(data: dict):
 
 
 def _input_hash(data: dict) -> str:
+    analysis_settings = dict(data.get("analysis_settings", {}))
+    analysis_settings.pop("auto_run", None)
     payload = {
-        "analysis_settings": data.get("analysis_settings", {}),
+        "analysis_settings": analysis_settings,
         "materials": data.get("materials", {}),
         "geometry": data.get("geometry", {}),
         "load_cases": data.get("load_cases", {}),
