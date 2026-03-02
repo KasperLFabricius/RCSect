@@ -73,6 +73,7 @@ def _get_example_geometry():
             {"id": 5, "x": 0.15, "y": -0.65},
             {"id": 6, "x": -0.15, "y": -0.65},
             {"id": 7, "x": -0.15, "y": 0.15},
+            {"id": 8, "x": -0.60, "y": 0.15},
         ],
         "concrete_voids": [],
         "reinforcement_mild": [
@@ -130,6 +131,7 @@ def _get_default_schema():
             "show_void_point_ids": False,
             "show_mild_bar_ids": False,
             "show_prestressed_bar_ids": False,
+            "scale_bar_markers_by_area": False,
         },
         "load_cases": {
             "elastic": [
