@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import pandas as pd
@@ -5,8 +6,11 @@ import streamlit as st
 
 from ui.aggrid_points import edit_ordered_points
 from utils.data_io import (
+    _get_default_schema,
+    _normalize_load_cases,
     coerce_rebar_rows,
     initialize_session_state,
+    list_autosave_history_files,
     load_example_geometry,
     normalize_geometry_for_use,
     validate_geometry_topology,
@@ -14,6 +18,8 @@ from utils.data_io import (
 
 
 GEOMETRY_EDITOR_BASE_KEYS = ["editor_outline", "editor_mild", "editor_pre"]
+LOAD_CASE_EDITOR_KEYS = ["editor_load_cases_elastic", "editor_load_cases_plastic"]
+RUN_BUTTON_PRESSED_KEY = "run_analysis_pressed"
 
 
 def _seed_widget(key, value):
@@ -33,7 +39,6 @@ def reset_geometry_editor_widgets(clear_void_keys: bool = True) -> None:
     void_keys = list(st.session_state.get("void_editor_keys", []))
     keys_to_clear.extend([f"editor_void_{k}" for k in void_keys])
 
-    # hygiene: clear orphaned void editor keys too
     for key in list(st.session_state.keys()):
         if key.startswith("editor_void_") and key not in keys_to_clear:
             keys_to_clear.append(key)
@@ -45,7 +50,19 @@ def reset_geometry_editor_widgets(clear_void_keys: bool = True) -> None:
 
 
 def reset_load_case_editor_widgets() -> None:
-    _reset_widget_keys(["editor_load_cases_elastic", "editor_load_cases_plastic"])
+    _reset_widget_keys(LOAD_CASE_EDITOR_KEYS)
+
+
+def reset_all_project_widgets() -> None:
+    reset_geometry_editor_widgets(clear_void_keys=True)
+    reset_load_case_editor_widgets()
+
+    for key in list(st.session_state.keys()):
+        if key.startswith("outline_v") or key.startswith("void_"):
+            st.session_state.pop(key, None)
+
+    st.session_state.pop("grid_versions", None)
+    st.session_state.pop(RUN_BUTTON_PRESSED_KEY, None)
 
 
 def _rebuild_void_editor_keys_from_geometry() -> None:
@@ -72,6 +89,30 @@ def _is_reversed(lhs: list[dict], rhs: list[dict]) -> bool:
     return len(lhs_xy) >= 3 and lhs_xy == list(reversed(rhs_xy))
 
 
+def _apply_project_data(project_data: dict) -> None:
+    defaults = _get_default_schema()
+    merged_data = defaults | project_data
+    merged_data["analysis_settings"] = defaults["analysis_settings"] | project_data.get("analysis_settings", {})
+    merged_data["materials"] = {
+        "concrete": defaults["materials"]["concrete"] | project_data.get("materials", {}).get("concrete", {}),
+        "mild_steel": defaults["materials"]["mild_steel"] | project_data.get("materials", {}).get("mild_steel", {}),
+        "prestressed_steel": defaults["materials"]["prestressed_steel"] | project_data.get("materials", {}).get("prestressed_steel", {}),
+    }
+    merged_data["plot_options"] = defaults["plot_options"] | project_data.get("plot_options", {})
+    merged_data["load_cases"] = _normalize_load_cases(project_data.get("load_cases"))
+    merged_data["geometry"] = normalize_geometry_for_use(project_data.get("geometry", defaults["geometry"]))
+    st.session_state.data = merged_data
+
+
+def _validate_project_payload(parsed) -> tuple[bool, str]:
+    if not isinstance(parsed, dict):
+        return False, "Project JSON must be an object/dictionary at top level."
+    required_keys = ["geometry", "materials", "load_cases"]
+    missing = [k for k in required_keys if k not in parsed]
+    if missing:
+        return False, f"Project JSON missing required keys: {', '.join(missing)}"
+    return True, ""
+
 
 def render_sidebar():
     initialize_session_state()
@@ -84,6 +125,10 @@ def render_sidebar():
     st.sidebar.radio("Analysis Mode", ["Elastic", "Plastic", "Both"], key="analysis_mode")
     settings["mode"] = st.session_state.analysis_mode
 
+    _seed_widget("analysis_auto_run", settings.get("auto_run", True))
+    st.sidebar.checkbox("Auto-run analysis", key="analysis_auto_run")
+    settings["auto_run"] = bool(st.session_state.analysis_auto_run)
+
     _seed_widget("autosave_enabled", settings.get("autosave_enabled", True))
     st.sidebar.checkbox("Enable autosave", key="autosave_enabled")
     settings["autosave_enabled"] = bool(st.session_state.autosave_enabled)
@@ -94,11 +139,31 @@ def render_sidebar():
     )
     settings["autosave_interval_seconds"] = int(st.session_state.autosave_interval_seconds)
 
+    _seed_widget("autosave_history_enabled", bool(settings.get("autosave_history_enabled", True)))
+    st.sidebar.checkbox("Enable autosave history", key="autosave_history_enabled")
+    settings["autosave_history_enabled"] = bool(st.session_state.autosave_history_enabled)
+
+    _seed_widget("autosave_history_interval_seconds", int(settings.get("autosave_history_interval_seconds", 300)))
+    st.sidebar.number_input(
+        "History snapshot interval (seconds)",
+        min_value=10,
+        max_value=3600,
+        step=10,
+        key="autosave_history_interval_seconds",
+    )
+    settings["autosave_history_interval_seconds"] = int(st.session_state.autosave_history_interval_seconds)
+
+    _seed_widget("autosave_history_max_files", int(settings.get("autosave_history_max_files", 20)))
+    st.sidebar.number_input(
+        "Max autosave history files", min_value=1, max_value=500, step=1, key="autosave_history_max_files"
+    )
+    settings["autosave_history_max_files"] = int(st.session_state.autosave_history_max_files)
+
     if st.session_state.get("last_autosave_timestamp"):
         st.sidebar.caption(f"Last autosave: {st.session_state['last_autosave_timestamp']}")
 
     st.sidebar.divider()
-    tab_mat, tab_geom, tab_load = st.sidebar.tabs(["Materials", "Geometry Input", "Load Cases"])
+    tab_mat, tab_geom, tab_load, tab_project = st.sidebar.tabs(["Materials", "Geometry Input", "Load Cases", "Project"])
 
     with tab_mat:
         _render_material_inputs()
@@ -106,12 +171,55 @@ def render_sidebar():
         _render_geometry_inputs()
     with tab_load:
         _render_load_case_inputs()
+    with tab_project:
+        _render_project_tab()
 
-    st.sidebar.divider()
-    st.sidebar.header("Data Management")
-    st.sidebar.button("Load JSON File", width="stretch")
-    st.sidebar.button("Save JSON File", width="stretch")
-    st.sidebar.button("Export Results to PDF", type="primary", width="stretch")
+
+def _render_project_tab() -> None:
+    data_json = json.dumps(st.session_state.data, indent=2)
+    st.download_button(
+        "Download project JSON",
+        data=data_json,
+        file_name="rcsect_project.json",
+        mime="application/json",
+        width="stretch",
+    )
+
+    upload_file = st.file_uploader("Upload project JSON", type=["json"], key="project_file_uploader")
+    if upload_file is not None:
+        try:
+            parsed = json.loads(upload_file.getvalue().decode("utf-8"))
+            is_valid, msg = _validate_project_payload(parsed)
+            if not is_valid:
+                st.error(msg)
+            else:
+                _apply_project_data(parsed)
+                reset_all_project_widgets()
+                st.rerun()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            st.error("Invalid JSON file.")
+
+    if st.button("Reset project", width="stretch"):
+        st.session_state.data = _get_default_schema()
+        st.session_state.data["geometry"] = normalize_geometry_for_use(st.session_state.data["geometry"])
+        reset_all_project_widgets()
+        st.rerun()
+
+    history_files = list_autosave_history_files()
+    labels_to_path = {f"{f.name} ({f.stat().st_size} bytes)": str(f) for f in history_files}
+    if labels_to_path:
+        selected = st.selectbox("Autosave snapshots", list(labels_to_path.keys()), key="history_snapshot_selected")
+        if st.button("Restore selected snapshot", width="stretch"):
+            try:
+                with open(labels_to_path[selected], "r", encoding="utf-8") as f:
+                    snapshot_data = json.load(f)
+                _apply_project_data(snapshot_data)
+                reset_all_project_widgets()
+                st.rerun()
+            except (OSError, json.JSONDecodeError):
+                st.error("Failed to load selected snapshot.")
+    else:
+        st.caption("No autosave snapshots found.")
 
 
 def _render_material_inputs():
@@ -238,21 +346,13 @@ def _render_geometry_inputs():
 
     st.write("**Mild Steel (x, y, area mm²)**")
     df_mild = pd.DataFrame(geom.get("reinforcement_mild", []), columns=["id", "x", "y", "area"])
-    edited_mild = st.data_editor(
-        df_mild, num_rows="dynamic", width="stretch", key="editor_mild"
-    )
+    edited_mild = st.data_editor(df_mild, num_rows="dynamic", width="stretch", key="editor_mild")
     geom["reinforcement_mild"] = coerce_rebar_rows(edited_mild.to_dict("records"))
 
     st.write("**Prestressed Steel (x, y, area mm²)**")
-    df_pre = pd.DataFrame(
-        geom.get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"]
-    )
-    edited_pre = st.data_editor(
-        df_pre, num_rows="dynamic", width="stretch", key="editor_pre"
-    )
-    geom["reinforcement_prestressed"] = coerce_rebar_rows(
-        edited_pre.to_dict("records"), include_eps0=True
-    )
+    df_pre = pd.DataFrame(geom.get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"])
+    edited_pre = st.data_editor(df_pre, num_rows="dynamic", width="stretch", key="editor_pre")
+    geom["reinforcement_prestressed"] = coerce_rebar_rows(edited_pre.to_dict("records"), include_eps0=True)
 
     edited_geom = {
         "concrete_outline": list(geom.get("concrete_outline", [])),
@@ -322,12 +422,7 @@ def _render_load_case_inputs():
     if mode in ["Elastic", "Both"]:
         st.write("**Elastic load cases**")
         df_elastic = pd.DataFrame(data["load_cases"].get("elastic", []), columns=elastic_columns)
-        edited_elastic = st.data_editor(
-            df_elastic,
-            num_rows="dynamic",
-            width="stretch",
-            key="editor_load_cases_elastic",
-        )
+        edited_elastic = st.data_editor(df_elastic, num_rows="dynamic", width="stretch", key="editor_load_cases_elastic")
         data["load_cases"]["elastic"] = edited_elastic.to_dict("records")
 
         add_col, rm_col = st.columns(2)
@@ -360,12 +455,7 @@ def _render_load_case_inputs():
     if mode in ["Plastic", "Both"]:
         st.write("**Plastic load cases**")
         df_plastic = pd.DataFrame(data["load_cases"].get("plastic", []), columns=plastic_columns)
-        edited_plastic = st.data_editor(
-            df_plastic,
-            num_rows="dynamic",
-            width="stretch",
-            key="editor_load_cases_plastic",
-        )
+        edited_plastic = st.data_editor(df_plastic, num_rows="dynamic", width="stretch", key="editor_load_cases_plastic")
         data["load_cases"]["plastic"] = edited_plastic.to_dict("records")
 
         add_col, rm_col = st.columns(2)
