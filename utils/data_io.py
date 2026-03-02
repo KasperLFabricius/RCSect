@@ -2,12 +2,14 @@ import copy
 import json
 import os
 import time
+from pathlib import Path
 
 import streamlit as st
 from shapely.geometry import LinearRing, Point, Polygon
 from shapely.validation import explain_validity
 
 AUTOSAVE_FILE = "rcsect_autosave.json"
+AUTOSAVE_HISTORY_DIR = "autosaves"
 
 
 def _coerce_float(value):
@@ -100,8 +102,12 @@ def _get_default_schema():
         },
         "analysis_settings": {
             "mode": "Both",
+            "auto_run": True,
             "autosave_enabled": True,
             "autosave_interval_seconds": 60,
+            "autosave_history_enabled": True,
+            "autosave_history_interval_seconds": 300,
+            "autosave_history_max_files": 20,
         },
         "materials": {
             "concrete": {"f_ck": 30.0, "gamma_c": 1.45, "alpha_cc": 1.0},
@@ -287,8 +293,12 @@ def initialize_session_state():
     defaults = _get_default_schema()
     data.setdefault("analysis_settings", {})
     data["analysis_settings"].setdefault("mode", defaults["analysis_settings"]["mode"])
+    data["analysis_settings"].setdefault("auto_run", defaults["analysis_settings"]["auto_run"])
     data["analysis_settings"].setdefault("autosave_enabled", True)
     data["analysis_settings"].setdefault("autosave_interval_seconds", 60)
+    data["analysis_settings"].setdefault("autosave_history_enabled", True)
+    data["analysis_settings"].setdefault("autosave_history_interval_seconds", 300)
+    data["analysis_settings"].setdefault("autosave_history_max_files", 20)
     data["load_cases"] = _normalize_load_cases(data.get("load_cases"))
     data.setdefault("plot_options", defaults["plot_options"])
     data.setdefault("geometry", defaults["geometry"])
@@ -313,12 +323,41 @@ def handle_autosave():
     with open(AUTOSAVE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
+    if "last_history_save_time" not in st.session_state:
+        st.session_state.last_history_save_time = 0.0
+
+    history_enabled = bool(settings.get("autosave_history_enabled", True))
+    history_interval = int(settings.get("autosave_history_interval_seconds", 300))
+    history_max_files = max(1, int(settings.get("autosave_history_max_files", 20)))
+    if history_enabled and current_time - st.session_state.last_history_save_time > history_interval:
+        Path(AUTOSAVE_HISTORY_DIR).mkdir(parents=True, exist_ok=True)
+        snapshot_name = f"rcsect_{time.strftime('%Y%m%d_%H%M%S')}.json"
+        snapshot_path = Path(AUTOSAVE_HISTORY_DIR) / snapshot_name
+        with open(snapshot_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+
+        snapshots = sorted(Path(AUTOSAVE_HISTORY_DIR).glob("rcsect_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for stale_file in snapshots[history_max_files:]:
+            try:
+                stale_file.unlink()
+            except OSError:
+                pass
+
+        st.session_state.last_history_save_time = current_time
+
     st.session_state.last_save_time = current_time
     st.session_state.last_autosave_timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def export_json():
     return json.dumps(st.session_state.data, indent=4)
+
+
+def list_autosave_history_files():
+    history_dir = Path(AUTOSAVE_HISTORY_DIR)
+    if not history_dir.exists():
+        return []
+    return sorted(history_dir.glob("rcsect_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
 
 
 def validate_geometry_topology(geometry_data):
