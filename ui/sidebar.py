@@ -283,6 +283,7 @@ def _render_geometry_inputs():
             ("show_void_point_ids", "Show void point IDs"),
             ("show_mild_bar_ids", "Show mild bar IDs"),
             ("show_prestressed_bar_ids", "Show prestressed bar IDs"),
+            ("scale_bar_markers_by_area", "Scale bar marker sizes by area"),
         ]:
             _seed_widget(key, plot_options.get(key, False))
             st.checkbox(label, key=key)
