@@ -273,6 +273,7 @@ def _render_geometry_inputs():
             st.rerun()
 
     if canonical_geom != geom:
+        reset_geometry_editor_widgets(clear_void_keys=False)
         st.rerun()
 
     plot_options = data["plot_options"]
