@@ -1,4 +1,3 @@
-import copy
 import uuid
 
 import pandas as pd
@@ -10,10 +9,7 @@ from utils.data_io import (
     initialize_session_state,
     load_example_geometry,
     normalize_geometry_for_use,
-    normalize_point_ids,
-    normalize_rebar_ids,
     validate_geometry_topology,
-    validate_winding_constraints,
 )
 
 
@@ -157,7 +153,10 @@ def _render_material_inputs():
 def _render_geometry_inputs():
     data = st.session_state.data
     geom = normalize_geometry_for_use(data["geometry"])
-    data["geometry"] = geom
+    if geom != data["geometry"]:
+        data["geometry"] = geom
+        reset_geometry_editor_widgets(clear_void_keys=False)
+        st.rerun()
 
     if "void_editor_keys" not in st.session_state:
         _rebuild_void_editor_keys_from_geometry()
@@ -169,18 +168,14 @@ def _render_geometry_inputs():
 
     st.write("**Concrete Outline (Clockwise)**")
     outline_records = sorted(geom.get("concrete_outline", []), key=lambda pt: pt["id"])
-    df_outline = pd.DataFrame(outline_records, columns=["id", "x", "y"])
+    if outline_records:
+        df_outline = pd.DataFrame(outline_records, columns=["id", "x", "y"])
+    else:
+        df_outline = pd.DataFrame(columns=["id", "x", "y"])
     edited_outline = st.data_editor(
         df_outline, num_rows="dynamic", width="stretch", key="editor_outline"
     )
-
-    next_geom = copy.deepcopy(geom)
-    next_geom["concrete_outline"] = _clean_point_rows(edited_outline.to_dict("records"))
-    next_geom = validate_winding_constraints(normalize_point_ids(next_geom))
-    if next_geom != geom:
-        data["geometry"] = next_geom
-        st.session_state.pop("editor_outline", None)
-        st.rerun()
+    geom["concrete_outline"] = _clean_point_rows(edited_outline.to_dict("records"))
 
     st.write("**Concrete voids (Counterclockwise)**")
     left_col, right_col = st.columns(2)
@@ -189,7 +184,7 @@ def _render_geometry_inputs():
         if st.button("Load example section", width="stretch"):
             reset_geometry_editor_widgets(clear_void_keys=True)
             data["geometry"] = load_example_geometry()
-            data["geometry"] = validate_winding_constraints(normalize_point_ids(data["geometry"]))
+            data["geometry"] = normalize_geometry_for_use(data["geometry"])
             _rebuild_void_editor_keys_from_geometry()
             st.rerun()
 
@@ -206,7 +201,7 @@ def _render_geometry_inputs():
             st.rerun()
 
     if st.button("Add void", key="add_void", width="stretch"):
-        data["geometry"].setdefault("concrete_voids", []).append(
+        geom.setdefault("concrete_voids", []).append(
             [
                 {"id": 1, "x": -0.10, "y": -0.10},
                 {"id": 2, "x": 0.10, "y": -0.10},
@@ -217,18 +212,18 @@ def _render_geometry_inputs():
         new_void_uuid = str(uuid.uuid4())
         st.session_state.void_editor_keys.append(new_void_uuid)
         _reset_widget_keys(["editor_outline", f"editor_void_{new_void_uuid}"])
-        data["geometry"] = normalize_geometry_for_use(data["geometry"])
+        data["geometry"] = normalize_geometry_for_use(geom)
         st.rerun()
 
-    for i, void in enumerate(data["geometry"].get("concrete_voids", [])):
+    for i, void in enumerate(geom.get("concrete_voids", [])):
         void_uuid = st.session_state.void_editor_keys[i]
         void_key = f"editor_void_{void_uuid}"
         with st.expander(f"Void {i + 1}", expanded=False):
             if st.button("Remove this void", key=f"remove_void_{i}", width="stretch"):
-                data["geometry"]["concrete_voids"].pop(i)
+                geom["concrete_voids"].pop(i)
                 removed_uuid = st.session_state.void_editor_keys.pop(i)
                 _reset_widget_keys(["editor_outline", f"editor_void_{removed_uuid}"])
-                data["geometry"] = validate_winding_constraints(normalize_point_ids(data["geometry"]))
+                data["geometry"] = normalize_geometry_for_use(geom)
                 st.rerun()
 
             void_records = sorted(void, key=lambda pt: pt["id"])
@@ -236,50 +231,30 @@ def _render_geometry_inputs():
             edited_void = st.data_editor(
                 df_void, num_rows="dynamic", width="stretch", key=void_key
             )
-
-            before = copy.deepcopy(data["geometry"])
-            candidate = copy.deepcopy(before)
-            candidate["concrete_voids"][i] = _clean_point_rows(edited_void.to_dict("records"))
-            candidate = validate_winding_constraints(normalize_point_ids(candidate))
-            if candidate != before:
-                data["geometry"] = candidate
-                st.session_state.pop(void_key, None)
-                st.rerun()
+            geom["concrete_voids"][i] = _clean_point_rows(edited_void.to_dict("records"))
 
     st.write("**Mild Steel (x, y, area mm²)**")
-    df_mild = pd.DataFrame(data["geometry"].get("reinforcement_mild", []), columns=["id", "x", "y", "area"])
+    df_mild = pd.DataFrame(geom.get("reinforcement_mild", []), columns=["id", "x", "y", "area"])
     edited_mild = st.data_editor(
         df_mild, num_rows="dynamic", width="stretch", key="editor_mild"
     )
-
-    before = copy.deepcopy(data["geometry"])
-    candidate = copy.deepcopy(before)
-    candidate["reinforcement_mild"] = coerce_rebar_rows(edited_mild.to_dict("records"))
-    candidate = normalize_rebar_ids(candidate)
-    if candidate != before:
-        data["geometry"] = candidate
-        st.session_state.pop("editor_mild", None)
-        st.session_state.pop("editor_pre", None)
-        st.rerun()
+    geom["reinforcement_mild"] = coerce_rebar_rows(edited_mild.to_dict("records"))
 
     st.write("**Prestressed Steel (x, y, area mm²)**")
     df_pre = pd.DataFrame(
-        data["geometry"].get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"]
+        geom.get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"]
     )
     edited_pre = st.data_editor(
         df_pre, num_rows="dynamic", width="stretch", key="editor_pre"
     )
-
-    before = copy.deepcopy(data["geometry"])
-    candidate = copy.deepcopy(before)
-    candidate["reinforcement_prestressed"] = coerce_rebar_rows(
+    geom["reinforcement_prestressed"] = coerce_rebar_rows(
         edited_pre.to_dict("records"), include_eps0=True
     )
-    candidate = normalize_rebar_ids(candidate)
-    if candidate != before:
-        data["geometry"] = candidate
-        st.session_state.pop("editor_mild", None)
-        st.session_state.pop("editor_pre", None)
+
+    canonical_geom = normalize_geometry_for_use(geom)
+    data["geometry"] = canonical_geom
+    if canonical_geom != geom:
+        reset_geometry_editor_widgets(clear_void_keys=False)
         st.rerun()
 
     plot_options = data["plot_options"]
