@@ -3,8 +3,8 @@ import uuid
 import pandas as pd
 import streamlit as st
 
+from ui.aggrid_points import edit_ordered_points
 from utils.data_io import (
-    coerce_point_rows,
     coerce_rebar_rows,
     initialize_session_state,
     load_example_geometry,
@@ -54,9 +54,23 @@ def _rebuild_void_editor_keys_from_geometry() -> None:
     ]
 
 
-def _clean_point_rows(rows):
-    cleaned = coerce_point_rows(rows)
-    return [{"id": pt.get("id"), "x": pt["x"], "y": pt["y"]} for pt in cleaned]
+def _ensure_grid_versions() -> None:
+    versions = st.session_state.setdefault("grid_versions", {})
+    versions.setdefault("outline", 0)
+    for void_uuid in st.session_state.get("void_editor_keys", []):
+        versions.setdefault(f"void_{void_uuid}", 0)
+
+
+def _bump_grid_version(grid_key: str) -> None:
+    _ensure_grid_versions()
+    st.session_state.grid_versions[grid_key] = st.session_state.grid_versions.get(grid_key, 0) + 1
+
+
+def _is_reversed(lhs: list[dict], rhs: list[dict]) -> bool:
+    lhs_xy = [(pt.get("x"), pt.get("y")) for pt in lhs]
+    rhs_xy = [(pt.get("x"), pt.get("y")) for pt in rhs]
+    return len(lhs_xy) >= 3 and lhs_xy == list(reversed(rhs_xy))
+
 
 
 def render_sidebar():
@@ -152,11 +166,7 @@ def _render_material_inputs():
 
 def _render_geometry_inputs():
     data = st.session_state.data
-    geom = normalize_geometry_for_use(data["geometry"])
-    if geom != data["geometry"]:
-        data["geometry"] = geom
-        reset_geometry_editor_widgets(clear_void_keys=False)
-        st.rerun()
+    geom = data["geometry"]
 
     if "void_editor_keys" not in st.session_state:
         _rebuild_void_editor_keys_from_geometry()
@@ -165,32 +175,26 @@ def _render_geometry_inputs():
         st.session_state.void_editor_keys.append(str(uuid.uuid4()))
     if len(st.session_state.void_editor_keys) > len(geom.get("concrete_voids", [])):
         st.session_state.void_editor_keys = st.session_state.void_editor_keys[: len(geom.get("concrete_voids", []))]
+    _ensure_grid_versions()
 
     st.write("**Concrete Outline (Clockwise)**")
-    outline_records = sorted(geom.get("concrete_outline", []), key=lambda pt: pt["id"])
-    if outline_records:
-        df_outline = pd.DataFrame(outline_records, columns=["id", "x", "y"])
-    else:
-        df_outline = pd.DataFrame(columns=["id", "x", "y"])
-    edited_outline = st.data_editor(
-        df_outline, num_rows="dynamic", width="stretch", key="editor_outline"
-    )
-    geom["concrete_outline"] = _clean_point_rows(edited_outline.to_dict("records"))
+    outline_grid_key = f"outline_v{st.session_state.grid_versions.get('outline', 0)}"
+    geom["concrete_outline"] = edit_ordered_points(geom.get("concrete_outline", []), outline_grid_key)
 
     st.write("**Concrete voids (Counterclockwise)**")
     left_col, right_col = st.columns(2)
 
     with left_col:
         if st.button("Load example section", width="stretch"):
-            reset_geometry_editor_widgets(clear_void_keys=True)
             data["geometry"] = load_example_geometry()
             data["geometry"] = normalize_geometry_for_use(data["geometry"])
             _rebuild_void_editor_keys_from_geometry()
+            st.session_state.grid_versions = {"outline": st.session_state.get("grid_versions", {}).get("outline", 0) + 1}
+            _ensure_grid_versions()
             st.rerun()
 
     with right_col:
         if st.button("Reset geometry", width="stretch"):
-            reset_geometry_editor_widgets(clear_void_keys=True)
             data["geometry"] = {
                 "concrete_outline": [],
                 "concrete_voids": [],
@@ -198,6 +202,7 @@ def _render_geometry_inputs():
                 "reinforcement_prestressed": [],
             }
             _rebuild_void_editor_keys_from_geometry()
+            st.session_state.grid_versions = {"outline": st.session_state.get("grid_versions", {}).get("outline", 0) + 1}
             st.rerun()
 
     if st.button("Add void", key="add_void", width="stretch"):
@@ -211,27 +216,25 @@ def _render_geometry_inputs():
         )
         new_void_uuid = str(uuid.uuid4())
         st.session_state.void_editor_keys.append(new_void_uuid)
-        _reset_widget_keys(["editor_outline", f"editor_void_{new_void_uuid}"])
+        _bump_grid_version("outline")
+        _bump_grid_version(f"void_{new_void_uuid}")
         data["geometry"] = normalize_geometry_for_use(geom)
         st.rerun()
 
     for i, void in enumerate(geom.get("concrete_voids", [])):
         void_uuid = st.session_state.void_editor_keys[i]
-        void_key = f"editor_void_{void_uuid}"
+        void_version = st.session_state.grid_versions.get(f"void_{void_uuid}", 0)
+        void_key = f"void_{void_uuid}_v{void_version}"
         with st.expander(f"Void {i + 1}", expanded=False):
             if st.button("Remove this void", key=f"remove_void_{i}", width="stretch"):
                 geom["concrete_voids"].pop(i)
                 removed_uuid = st.session_state.void_editor_keys.pop(i)
-                _reset_widget_keys(["editor_outline", f"editor_void_{removed_uuid}"])
+                st.session_state.grid_versions.pop(f"void_{removed_uuid}", None)
+                _bump_grid_version("outline")
                 data["geometry"] = normalize_geometry_for_use(geom)
                 st.rerun()
 
-            void_records = sorted(void, key=lambda pt: pt["id"])
-            df_void = pd.DataFrame(void_records, columns=["id", "x", "y"])
-            edited_void = st.data_editor(
-                df_void, num_rows="dynamic", width="stretch", key=void_key
-            )
-            geom["concrete_voids"][i] = _clean_point_rows(edited_void.to_dict("records"))
+            geom["concrete_voids"][i] = edit_ordered_points(void, void_key)
 
     st.write("**Mild Steel (x, y, area mm²)**")
     df_mild = pd.DataFrame(geom.get("reinforcement_mild", []), columns=["id", "x", "y", "area"])
@@ -251,8 +254,24 @@ def _render_geometry_inputs():
         edited_pre.to_dict("records"), include_eps0=True
     )
 
+    edited_geom = {
+        "concrete_outline": list(geom.get("concrete_outline", [])),
+        "concrete_voids": [list(v) for v in geom.get("concrete_voids", [])],
+    }
     canonical_geom = normalize_geometry_for_use(geom)
     data["geometry"] = canonical_geom
+    if _is_reversed(edited_geom.get("concrete_outline", []), canonical_geom.get("concrete_outline", [])):
+        _bump_grid_version("outline")
+        st.rerun()
+
+    for i, void_points in enumerate(edited_geom.get("concrete_voids", [])):
+        if i >= len(canonical_geom.get("concrete_voids", [])):
+            continue
+        if _is_reversed(void_points, canonical_geom["concrete_voids"][i]):
+            void_uuid = st.session_state.void_editor_keys[i]
+            _bump_grid_version(f"void_{void_uuid}")
+            st.rerun()
+
     if canonical_geom != geom:
         reset_geometry_editor_widgets(clear_void_keys=False)
         st.rerun()
