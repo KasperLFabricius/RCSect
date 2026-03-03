@@ -46,8 +46,8 @@ def edit_ordered_points(points, key_prefix) -> list[dict]:
                 "pinned": "left",
             },
             {"headerName": "ID", "field": "id", "editable": False, "width": 70},
-            {"headerName": "x", "field": "x", "editable": True, "type": "numericColumn"},
-            {"headerName": "y", "field": "y", "editable": True, "type": "numericColumn"},
+            {"headerName": "x [m]", "field": "x", "editable": True, "type": "numericColumn"},
+            {"headerName": "y [m]", "field": "y", "editable": True, "type": "numericColumn"},
         ],
     }
 

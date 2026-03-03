@@ -8,6 +8,7 @@ import streamlit as st
 from shapely.geometry import LinearRing, Point, Polygon
 from shapely.validation import explain_validity
 
+
 AUTOSAVE_FILE = "rcsect_autosave.json"
 AUTOSAVE_HISTORY_DIR = "autosaves"
 
@@ -110,11 +111,12 @@ def _get_default_schema():
             "autosave_history_max_files": 20,
         },
         "materials": {
-            "concrete": {"f_ck": 30.0, "gamma_c": 1.45, "alpha_cc": 1.0},
+            "concrete": {"f_ck": 30.0, "gamma_c": 1.45, "alpha_cc": 1.0, "E_c_GPa": 33.0},
             "mild_steel": {
                 "f_yk": 500.0,
                 "gamma_s": 1.20,
                 "e_uk": 0.05,
+                "E_s_GPa": 200.0,
                 "include_hardening": False,
                 "f_uk": 550.0,
             },
@@ -314,6 +316,25 @@ def initialize_session_state():
     data["analysis_settings"].setdefault("autosave_history_interval_seconds", 300)
     data["analysis_settings"].setdefault("autosave_history_max_files", 20)
     data["load_cases"] = _normalize_load_cases(data.get("load_cases"))
+
+    materials = data.setdefault("materials", {})
+    concrete = materials.setdefault("concrete", {})
+    mild_steel = materials.setdefault("mild_steel", {})
+    concrete.setdefault("E_c_GPa", defaults["materials"]["concrete"]["E_c_GPa"])
+    mild_steel.setdefault("E_s_GPa", defaults["materials"]["mild_steel"]["E_s_GPa"])
+
+    old_concrete_ec = concrete.pop("E_c", None)
+    if old_concrete_ec is not None:
+        concrete["E_c_GPa"] = float(old_concrete_ec) / 1000.0
+
+    old_mild_es = mild_steel.pop("E_s", None)
+    if old_mild_es is not None:
+        mild_steel["E_s_GPa"] = float(old_mild_es) / 1000.0
+
+    # Backward-compatibility no-op guard in case legacy data already used GPa values under MPa keys.
+    concrete["E_c_GPa"] = float(concrete["E_c_GPa"])
+    mild_steel["E_s_GPa"] = float(mild_steel["E_s_GPa"])
+
     _merge_plot_options_defaults(data)
     data.setdefault("geometry", defaults["geometry"])
     data["geometry"] = normalize_geometry_for_use(data["geometry"])

@@ -18,6 +18,7 @@ from core.geometry import CrossSection
 from core.materials import Concrete, MildSteel, PrestressedSteel
 from core.solver_elastic import ElasticSolver
 from core.solver_plastic import PlasticSolver
+from utils.units import gpa_to_mpa
 
 
 def build_computational_models(data):
@@ -64,7 +65,13 @@ def _compute_results(data: dict):
     computed = {"can_run": True, "elastic": [], "plastic": []}
 
     if mode in ["Elastic", "Both"]:
-        elastic_engine = ElasticSolver(cross_section=cs, E_c=33000.0, E_s=200000.0)
+        mat_c = data["materials"]["concrete"]
+        mat_s = data["materials"]["mild_steel"]
+        elastic_engine = ElasticSolver(
+            cross_section=cs,
+            E_c=gpa_to_mpa(mat_c.get("E_c_GPa", 33.0)),
+            E_s=gpa_to_mpa(mat_s.get("E_s_GPa", 200.0)),
+        )
         for case in data.get("load_cases", {}).get("elastic", []):
             case_name = case.get("name", "Unnamed")
             try:

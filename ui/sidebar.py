@@ -226,50 +226,85 @@ def _render_material_inputs():
     mats = st.session_state.data["materials"]
 
     with st.expander("Concrete", expanded=True):
+        st.caption("EC2 Section 3.1")
         _seed_widget("mat_fck", mats["concrete"]["f_ck"])
         _seed_widget("mat_gamma_c", mats["concrete"]["gamma_c"])
         _seed_widget("mat_alpha_cc", mats["concrete"]["alpha_cc"])
-        st.number_input("f_ck (MPa)", min_value=10.0, max_value=150.0, key="mat_fck")
-        st.number_input("gamma_c", min_value=1.0, key="mat_gamma_c")
-        st.number_input("alpha_cc", min_value=0.8, max_value=1.0, key="mat_alpha_cc")
+        _seed_widget("mat_ec_gpa", mats["concrete"].get("E_c_GPa", 33.0))
+
+        st.markdown(r"$f_{ck}$ [MPa]")
+        st.number_input("f_ck", min_value=10.0, max_value=150.0, key="mat_fck", label_visibility="collapsed")
+        st.markdown(r"$\alpha_{cc}$ [-]")
+        st.number_input("alpha_cc", min_value=0.8, max_value=1.0, key="mat_alpha_cc", label_visibility="collapsed")
+        st.markdown(r"$\gamma_c$ [-]")
+        st.number_input("gamma_c", min_value=1.0, key="mat_gamma_c", label_visibility="collapsed")
+        st.markdown(r"$E_{cm}$ [GPa]")
+        st.number_input(
+            "E_cm",
+            min_value=1.0,
+            key="mat_ec_gpa",
+            help="Elastic modulus for elastic analysis baseline",
+            label_visibility="collapsed",
+        )
+
         mats["concrete"]["f_ck"] = float(st.session_state.mat_fck)
         mats["concrete"]["gamma_c"] = float(st.session_state.mat_gamma_c)
         mats["concrete"]["alpha_cc"] = float(st.session_state.mat_alpha_cc)
+        mats["concrete"]["E_c_GPa"] = float(st.session_state.mat_ec_gpa)
 
     with st.expander("Mild Reinforcement", expanded=False):
+        st.caption("EC2 Section 3.2 · DK NA safety factors")
         _seed_widget("mat_fyk", mats["mild_steel"]["f_yk"])
+        _seed_widget("mat_es_gpa", mats["mild_steel"].get("E_s_GPa", 200.0))
         _seed_widget("mat_gamma_s", mats["mild_steel"]["gamma_s"])
-        _seed_widget("mat_euk", mats["mild_steel"]["e_uk"])
+        _seed_widget("mat_euk_pm", mats["mild_steel"]["e_uk"] * 1000.0)
         _seed_widget("mat_hard", mats["mild_steel"]["include_hardening"])
         _seed_widget("mat_fuk", mats["mild_steel"].get("f_uk", mats["mild_steel"]["f_yk"]))
-        st.number_input("f_yk (MPa)", min_value=200.0, key="mat_fyk")
-        st.number_input("gamma_s", min_value=1.0, key="mat_gamma_s")
-        st.number_input("e_uk (-)", min_value=0.01, format="%.3f", key="mat_euk")
-        st.checkbox("Include Strain Hardening", key="mat_hard")
+
+        st.markdown(r"$f_{yk}$ [MPa]")
+        st.number_input("f_yk", min_value=200.0, key="mat_fyk", label_visibility="collapsed")
+        st.markdown(r"$E_s$ [GPa]")
+        st.number_input("E_s", min_value=1.0, key="mat_es_gpa", label_visibility="collapsed")
+        st.markdown(r"$\gamma_s$ [-]")
+        st.number_input("gamma_s", min_value=1.0, key="mat_gamma_s", label_visibility="collapsed")
+        st.markdown(r"$\varepsilon_{uk}$ [‰]")
+        st.number_input("eps_uk", min_value=0.0, format="%.1f", key="mat_euk_pm", label_visibility="collapsed")
+        st.checkbox("Include strain hardening", key="mat_hard")
         if st.session_state.mat_hard:
-            st.number_input("f_uk (MPa)", min_value=float(st.session_state.mat_fyk), key="mat_fuk")
+            st.markdown(r"$f_{uk}$ [MPa]")
+            st.number_input("f_uk", min_value=float(st.session_state.mat_fyk), key="mat_fuk", label_visibility="collapsed")
+
         mats["mild_steel"]["f_yk"] = float(st.session_state.mat_fyk)
+        mats["mild_steel"]["E_s_GPa"] = float(st.session_state.mat_es_gpa)
         mats["mild_steel"]["gamma_s"] = float(st.session_state.mat_gamma_s)
-        mats["mild_steel"]["e_uk"] = float(st.session_state.mat_euk)
+        mats["mild_steel"]["e_uk"] = float(st.session_state.mat_euk_pm) / 1000.0
         mats["mild_steel"]["include_hardening"] = bool(st.session_state.mat_hard)
         mats["mild_steel"]["f_uk"] = float(st.session_state.mat_fuk)
 
     with st.expander("Prestressing Steel", expanded=False):
+        st.caption("EC2 Section 3.3 · DK NA safety factors")
         _seed_widget("mat_fp01k", mats["prestressed_steel"]["f_p01k"])
         _seed_widget("mat_fpk", mats["prestressed_steel"]["f_pk"])
         _seed_widget("mat_gamma_p", mats["prestressed_steel"]["gamma_p"])
-        _seed_widget("mat_initial_strain", mats["prestressed_steel"]["initial_strain"])
-        _seed_widget("mat_pre_euk", mats["prestressed_steel"]["e_uk"])
-        st.number_input("f_p01k (MPa)", min_value=1000.0, key="mat_fp01k")
-        st.number_input("f_pk (MPa)", min_value=1000.0, key="mat_fpk")
-        st.number_input("gamma_p", min_value=1.0, key="mat_gamma_p")
-        st.number_input("Initial Prestrain (-)", min_value=0.0, format="%.4f", key="mat_initial_strain")
-        st.number_input("e_uk (-)", min_value=0.01, format="%.3f", key="mat_pre_euk")
+        _seed_widget("mat_initial_strain_pm", mats["prestressed_steel"]["initial_strain"] * 1000.0)
+        _seed_widget("mat_pre_euk_pm", mats["prestressed_steel"]["e_uk"] * 1000.0)
+
+        st.markdown(r"$f_{p0.1k}$ [MPa]")
+        st.number_input("f_p01k", min_value=1000.0, key="mat_fp01k", label_visibility="collapsed")
+        st.markdown(r"$f_{pk}$ [MPa]")
+        st.number_input("f_pk", min_value=1000.0, key="mat_fpk", label_visibility="collapsed")
+        st.markdown(r"$\gamma_p$ [-]")
+        st.number_input("gamma_p", min_value=1.0, key="mat_gamma_p", label_visibility="collapsed")
+        st.markdown(r"$\varepsilon_{uk}$ [‰]")
+        st.number_input("eps_pre_uk", min_value=0.0, format="%.1f", key="mat_pre_euk_pm", label_visibility="collapsed")
+        st.markdown(r"$\varepsilon_{p,0}$ [‰]")
+        st.number_input("eps_p0", min_value=0.0, format="%.1f", key="mat_initial_strain_pm", label_visibility="collapsed")
+
         mats["prestressed_steel"]["f_p01k"] = float(st.session_state.mat_fp01k)
         mats["prestressed_steel"]["f_pk"] = float(st.session_state.mat_fpk)
         mats["prestressed_steel"]["gamma_p"] = float(st.session_state.mat_gamma_p)
-        mats["prestressed_steel"]["initial_strain"] = float(st.session_state.mat_initial_strain)
-        mats["prestressed_steel"]["e_uk"] = float(st.session_state.mat_pre_euk)
+        mats["prestressed_steel"]["initial_strain"] = float(st.session_state.mat_initial_strain_pm) / 1000.0
+        mats["prestressed_steel"]["e_uk"] = float(st.session_state.mat_pre_euk_pm) / 1000.0
 
 
 def _render_geometry_inputs():
@@ -345,14 +380,32 @@ def _render_geometry_inputs():
 
             geom["concrete_voids"][i] = edit_ordered_points(void, void_key)
 
-    st.write("**Mild Steel (x, y, area mm²)**")
+    st.write("**Mild Steel**")
+    st.caption("Units: x, y in m; A in mm²")
     df_mild = pd.DataFrame(geom.get("reinforcement_mild", []), columns=["id", "x", "y", "area"])
-    edited_mild = st.data_editor(df_mild, num_rows="dynamic", width="stretch", key="editor_mild")
+    edited_mild = st.data_editor(
+        df_mild,
+        num_rows="dynamic",
+        width="stretch",
+        key="editor_mild",
+        column_config={"x": "x [m]", "y": "y [m]", "area": "A [mm²]"},
+    )
     geom["reinforcement_mild"] = coerce_rebar_rows(edited_mild.to_dict("records"))
 
-    st.write("**Prestressed Steel (x, y, area mm²)**")
+    st.write("**Prestressed Steel**")
+    st.caption("Units: x, y in m; A in mm²; εp,0 in ‰")
     df_pre = pd.DataFrame(geom.get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"])
-    edited_pre = st.data_editor(df_pre, num_rows="dynamic", width="stretch", key="editor_pre")
+    if not df_pre.empty and "eps0" in df_pre.columns:
+        df_pre["eps0"] = pd.to_numeric(df_pre["eps0"], errors="coerce") * 1000.0
+    edited_pre = st.data_editor(
+        df_pre,
+        num_rows="dynamic",
+        width="stretch",
+        key="editor_pre",
+        column_config={"x": "x [m]", "y": "y [m]", "area": "A [mm²]", "eps0": "εp,0 [‰]"},
+    )
+    if "eps0" in edited_pre.columns:
+        edited_pre["eps0"] = pd.to_numeric(edited_pre["eps0"], errors="coerce") / 1000.0
     geom["reinforcement_prestressed"] = coerce_rebar_rows(edited_pre.to_dict("records"), include_eps0=True)
 
     edited_geom = {
@@ -495,8 +548,18 @@ def _render_load_case_inputs():
 
     if mode in ["Elastic", "Both"]:
         st.write("**Elastic load cases**")
+        st.caption("Units: P in kN, Mx/My in kNm, n as [-]")
         df_elastic = pd.DataFrame(data["load_cases"].get("elastic", []), columns=elastic_columns)
-        edited_elastic = st.data_editor(df_elastic, num_rows="dynamic", width="stretch", key="editor_load_cases_elastic")
+        edited_elastic = st.data_editor(
+            df_elastic,
+            num_rows="dynamic",
+            width="stretch",
+            key="editor_load_cases_elastic",
+            column_config={
+                "P_l": "P_l [kN]", "Mx_l": "Mx_l [kNm]", "My_l": "My_l [kNm]", "n_l": "n_l [-]",
+                "P_s": "P_s [kN]", "Mx_s": "Mx_s [kNm]", "My_s": "My_s [kNm]", "n_s": "n_s [-]",
+            },
+        )
         data["load_cases"]["elastic"] = edited_elastic.to_dict("records")
 
         add_col, rm_col = st.columns(2)
@@ -528,8 +591,15 @@ def _render_load_case_inputs():
 
     if mode in ["Plastic", "Both"]:
         st.write("**Plastic load cases**")
+        st.caption("Units: P in kN; V angles in deg")
         df_plastic = pd.DataFrame(data["load_cases"].get("plastic", []), columns=plastic_columns)
-        edited_plastic = st.data_editor(df_plastic, num_rows="dynamic", width="stretch", key="editor_load_cases_plastic")
+        edited_plastic = st.data_editor(
+            df_plastic,
+            num_rows="dynamic",
+            width="stretch",
+            key="editor_load_cases_plastic",
+            column_config={"P_target": "P [kN]", "v_min": "V_min [deg]", "v_max": "V_max [deg]", "v_inc": "ΔV [deg]"},
+        )
         data["load_cases"]["plastic"] = edited_plastic.to_dict("records")
 
         add_col, rm_col = st.columns(2)
