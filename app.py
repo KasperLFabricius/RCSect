@@ -125,7 +125,7 @@ def _input_hash(data: dict) -> str:
 
 
 def main():
-    st.set_page_config(page_title="RCSect", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title="RCSect", page_icon="🏗", layout="wide", initial_sidebar_state="expanded")
     st.title("RCSect: Reinforced Concrete Section Analysis")
 
     initialize_session_state()
@@ -141,7 +141,7 @@ def main():
 
     with col_canvas:
         st.subheader("Cross-Section Geometry")
-        render_geometry_plot()
+        canvas_container = st.container()
 
     with col_results:
         st.subheader("Analysis Results")
@@ -195,6 +195,10 @@ def main():
                         render_plastic_export(item["case_name"], item["result"])
         elif not auto_run and can_run_analysis and cached.get("hash") != current_hash:
             st.info("Analysis inputs changed. Click 'Run analysis' to refresh results.")
+
+
+    with canvas_container:
+        render_geometry_plot()
 
     handle_autosave()
 
