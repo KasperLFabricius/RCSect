@@ -29,6 +29,7 @@ def build_computational_models(data):
     mild_steel = MildSteel(
         f_yk=mat_s["f_yk"],
         gamma_s=mat_s["gamma_s"],
+        E_s=gpa_to_mpa(mat_s.get("E_s_GPa", 200.0)),
         e_uk=mat_s["e_uk"],
         f_uk=mat_s.get("f_uk", None),
         include_hardening=mat_s.get("include_hardening", False),
@@ -43,6 +44,7 @@ def build_computational_models(data):
             initial_strain=mat_p["initial_strain"],
             e_uk=mat_p["e_uk"],
             gamma_s=mat_p["gamma_p"],
+            E_p=gpa_to_mpa(mat_p.get("E_p_GPa", 195.0)),
         )
 
     cross_section = CrossSection(

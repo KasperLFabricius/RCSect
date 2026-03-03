@@ -286,6 +286,7 @@ def _render_material_inputs():
         _seed_widget("mat_fp01k", mats["prestressed_steel"]["f_p01k"])
         _seed_widget("mat_fpk", mats["prestressed_steel"]["f_pk"])
         _seed_widget("mat_gamma_p", mats["prestressed_steel"]["gamma_p"])
+        _seed_widget("mat_ep_gpa", mats["prestressed_steel"].get("E_p_GPa", 195.0))
         _seed_widget("mat_initial_strain_pm", mats["prestressed_steel"]["initial_strain"] * 1000.0)
         _seed_widget("mat_pre_euk_pm", mats["prestressed_steel"]["e_uk"] * 1000.0)
 
@@ -295,6 +296,8 @@ def _render_material_inputs():
         st.number_input("f_pk", min_value=1000.0, key="mat_fpk", label_visibility="collapsed")
         st.markdown(r"$\gamma_p$ [-]")
         st.number_input("gamma_p", min_value=1.0, key="mat_gamma_p", label_visibility="collapsed")
+        st.markdown(r"$E_p$ [GPa]")
+        st.number_input("E_p", min_value=1.0, key="mat_ep_gpa", label_visibility="collapsed")
         st.markdown(r"$\varepsilon_{uk}$ [‰]")
         st.number_input("eps_pre_uk", min_value=0.0, format="%.1f", key="mat_pre_euk_pm", label_visibility="collapsed")
         st.markdown(r"$\varepsilon_{p,0}$ [‰]")
@@ -303,6 +306,7 @@ def _render_material_inputs():
         mats["prestressed_steel"]["f_p01k"] = float(st.session_state.mat_fp01k)
         mats["prestressed_steel"]["f_pk"] = float(st.session_state.mat_fpk)
         mats["prestressed_steel"]["gamma_p"] = float(st.session_state.mat_gamma_p)
+        mats["prestressed_steel"]["E_p_GPa"] = float(st.session_state.mat_ep_gpa)
         mats["prestressed_steel"]["initial_strain"] = float(st.session_state.mat_initial_strain_pm) / 1000.0
         mats["prestressed_steel"]["e_uk"] = float(st.session_state.mat_pre_euk_pm) / 1000.0
 

@@ -124,6 +124,7 @@ def _get_default_schema():
                 "f_p01k": 1500.0,
                 "f_pk": 1700.0,
                 "gamma_p": 1.20,
+                "E_p_GPa": 195.0,
                 "initial_strain": 0.004,
                 "e_uk": 0.035,
             },
@@ -320,8 +321,10 @@ def initialize_session_state():
     materials = data.setdefault("materials", {})
     concrete = materials.setdefault("concrete", {})
     mild_steel = materials.setdefault("mild_steel", {})
+    prestressed_steel = materials.setdefault("prestressed_steel", {})
     concrete.setdefault("E_c_GPa", defaults["materials"]["concrete"]["E_c_GPa"])
     mild_steel.setdefault("E_s_GPa", defaults["materials"]["mild_steel"]["E_s_GPa"])
+    prestressed_steel.setdefault("E_p_GPa", defaults["materials"]["prestressed_steel"].get("E_p_GPa", 195.0))
 
     old_concrete_ec = concrete.pop("E_c", None)
     if old_concrete_ec is not None:
@@ -331,9 +334,14 @@ def initialize_session_state():
     if old_mild_es is not None:
         mild_steel["E_s_GPa"] = float(old_mild_es) / 1000.0
 
+    old_prestress_ep = prestressed_steel.pop("E_p", None)
+    if old_prestress_ep is not None:
+        prestressed_steel["E_p_GPa"] = float(old_prestress_ep) / 1000.0
+
     # Backward-compatibility no-op guard in case legacy data already used GPa values under MPa keys.
     concrete["E_c_GPa"] = float(concrete["E_c_GPa"])
     mild_steel["E_s_GPa"] = float(mild_steel["E_s_GPa"])
+    prestressed_steel["E_p_GPa"] = float(prestressed_steel["E_p_GPa"])
 
     _merge_plot_options_defaults(data)
     data.setdefault("geometry", defaults["geometry"])

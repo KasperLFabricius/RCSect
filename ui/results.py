@@ -33,10 +33,18 @@ def render_geometry_exports(geometry: dict):
     )
 
     mild_rows = [{"type": "mild", **bar} for bar in geometry.get("reinforcement_mild", [])]
-    pre_rows = [{"type": "prestress", **bar} for bar in geometry.get("reinforcement_prestressed", [])]
+    pre_rows = []
+    for bar in geometry.get("reinforcement_prestressed", []):
+        row = {"type": "prestress", **bar}
+        eps0_strain = row.get("eps0")
+        if eps0_strain is not None:
+            row["eps0_strain"] = eps0_strain
+            row["eps0_permille"] = 1000.0 * eps0_strain
+        pre_rows.append(row)
+
     rebar_df = pd.DataFrame(mild_rows + pre_rows)
     if "x" in rebar_df.columns:
-        rebar_df = rebar_df.rename(columns={"x": "x_m", "y": "y_m", "area": "A_mm2", "eps0": "eps0_strain"})
+        rebar_df = rebar_df.rename(columns={"x": "x_m", "y": "y_m", "area": "A_mm2"})
     st.download_button(
         "Download reinforcement CSV",
         data=_to_csv_bytes(rebar_df),
@@ -54,9 +62,11 @@ def render_elastic_results(elastic_output: dict):
 
     col1, col2 = st.columns(2)
     with col1:
-        st.metric(label="$\\sigma_{c,max}$ [MPa]", value=f"{max_c_mpa:.3f}")
+        st.markdown(r"$\sigma_{c,\max}\ [\mathrm{MPa}]$")
+        st.metric(label="", value=f"{max_c_mpa:.3f}", label_visibility="collapsed")
     with col2:
-        st.metric(label="Max steel tension $\\sigma_s$ [MPa] (TOTAL)", value=f"{max_tension_mpa:.3f}")
+        st.markdown(r"$\sigma_{s,\max,\mathrm{TOTAL}}\ [\mathrm{MPa}]$")
+        st.metric(label="", value=f"{max_tension_mpa:.3f}", label_visibility="collapsed")
 
     st.markdown("#### Individual bar stresses")
     table_data = []
