@@ -67,7 +67,6 @@ def area_moments(geom):
             for tri in triangulate(g):
                 tri_clip = tri.intersection(g)
                 integrate_geom(tri_clip)
-            return
 
         for part in getattr(g, "geoms", []):
             integrate_geom(part)
@@ -81,8 +80,8 @@ def centroid_and_principal_axes(geom):
     if A <= 0.0:
         raise ValueError("Section area must be positive.")
 
-    cx = Iy / A
-    cy = Ix / A
+    cx = Ix / A
+    cy = Iy / A
 
     Ixx_c = Ixx - A * cy * cy
     Iyy_c = Iyy - A * cx * cx

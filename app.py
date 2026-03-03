@@ -132,6 +132,8 @@ def main():
     render_sidebar()
 
     data = st.session_state.data
+    current_hash = _input_hash(data)
+    st.session_state["current_input_hash"] = current_hash
     mode = data["analysis_settings"]["mode"]
     auto_run = bool(data["analysis_settings"].get("auto_run", True))
 
@@ -149,8 +151,6 @@ def main():
         if not can_run_analysis:
             st.warning("Please define the concrete geometry to run the analysis.")
 
-        current_hash = _input_hash(data)
-        st.session_state["current_input_hash"] = current_hash
         cached = st.session_state.get("last_results_cache", {})
 
         should_compute = auto_run and can_run_analysis

@@ -177,6 +177,11 @@ def _get_default_schema():
     }
 
 
+def _merge_plot_options_defaults(data: dict) -> None:
+    default_plot_opts = _get_default_schema()["plot_options"]
+    data["plot_options"] = {**default_plot_opts, **data.get("plot_options", {})}
+
+
 def _normalize_load_cases(load_cases):
     defaults = _get_default_schema()["load_cases"]
     if not isinstance(load_cases, dict):
@@ -309,7 +314,7 @@ def initialize_session_state():
     data["analysis_settings"].setdefault("autosave_history_interval_seconds", 300)
     data["analysis_settings"].setdefault("autosave_history_max_files", 20)
     data["load_cases"] = _normalize_load_cases(data.get("load_cases"))
-    data.setdefault("plot_options", defaults["plot_options"])
+    _merge_plot_options_defaults(data)
     data.setdefault("geometry", defaults["geometry"])
     data["geometry"] = normalize_geometry_for_use(data["geometry"])
 
