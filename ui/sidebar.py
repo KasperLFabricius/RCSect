@@ -385,10 +385,83 @@ def _render_geometry_inputs():
             ("show_mild_bar_ids", "Show mild bar IDs"),
             ("show_prestressed_bar_ids", "Show prestressed bar IDs"),
             ("scale_bar_markers_by_area", "Scale bar marker sizes by area"),
+            ("show_centroid", "Show centroid"),
+            ("show_principal_axes", "Show principal axes"),
+            ("show_elastic_na", "Show elastic neutral axis"),
+            ("show_plastic_na", "Show plastic neutral axis"),
         ]:
             _seed_widget(key, plot_options.get(key, False))
             st.checkbox(label, key=key)
             plot_options[key] = bool(st.session_state[key])
+
+        _seed_widget("overlay_line_width", float(plot_options.get("overlay_line_width", 2.0)))
+        st.number_input(
+            "Overlay line width",
+            min_value=0.5,
+            max_value=8.0,
+            step=0.5,
+            key="overlay_line_width",
+        )
+        plot_options["overlay_line_width"] = float(st.session_state.overlay_line_width)
+
+        elastic_ids = [case.get("id") for case in data.get("load_cases", {}).get("elastic", []) if case.get("id") is not None]
+        plastic_ids = [case.get("id") for case in data.get("load_cases", {}).get("plastic", []) if case.get("id") is not None]
+
+        if plot_options.get("show_elastic_na", True):
+            if elastic_ids:
+                default_el_id = plot_options.get("elastic_na_case_id", elastic_ids[0])
+                if default_el_id not in elastic_ids:
+                    default_el_id = elastic_ids[0]
+                _seed_widget("elastic_na_case_id", default_el_id)
+                st.selectbox("Elastic NA load case", elastic_ids, key="elastic_na_case_id")
+                plot_options["elastic_na_case_id"] = st.session_state.elastic_na_case_id
+            else:
+                st.info("Add an elastic load case to select an elastic neutral axis overlay.")
+                plot_options["elastic_na_case_id"] = None
+
+            default_state = plot_options.get("elastic_na_state", "RST1")
+            if default_state not in ["LONG", "RST1"]:
+                default_state = "RST1"
+            _seed_widget("elastic_na_state", default_state)
+            st.radio("Elastic NA state", ["LONG", "RST1"], horizontal=True, key="elastic_na_state")
+            plot_options["elastic_na_state"] = st.session_state.elastic_na_state
+
+        if plot_options.get("show_plastic_na", False):
+            if plastic_ids:
+                default_pl_id = plot_options.get("plastic_na_case_id", plastic_ids[0])
+                if default_pl_id not in plastic_ids:
+                    default_pl_id = plastic_ids[0]
+                _seed_widget("plastic_na_case_id", default_pl_id)
+                st.selectbox("Plastic NA load case", plastic_ids, key="plastic_na_case_id")
+                plot_options["plastic_na_case_id"] = st.session_state.plastic_na_case_id
+            else:
+                st.info("Add a plastic load case to select a plastic neutral axis overlay.")
+                plot_options["plastic_na_case_id"] = None
+
+            cache = st.session_state.get("last_results_cache")
+            current_hash = st.session_state.get("current_input_hash")
+            cache_is_current = bool(cache and cache.get("hash") == current_hash)
+
+            available_angles = []
+            if cache_is_current and plot_options.get("plastic_na_case_id") is not None:
+                for item in cache.get("results", {}).get("plastic", []):
+                    if item.get("case", {}).get("id") == plot_options.get("plastic_na_case_id") and item.get("result"):
+                        available_angles = [float(entry.get("V", 0.0)) for entry in item["result"] if entry.get("V") is not None]
+                        break
+
+            if available_angles:
+                options_angles = sorted(set(available_angles))
+                default_angle = float(plot_options.get("plastic_na_angle_deg", options_angles[0]))
+                if default_angle not in options_angles:
+                    default_angle = min(options_angles, key=lambda v: abs(v - default_angle))
+                _seed_widget("plastic_na_angle_deg", default_angle)
+                st.selectbox("Plastic NA angle (deg)", options_angles, key="plastic_na_angle_deg")
+                plot_options["plastic_na_angle_deg"] = float(st.session_state.plastic_na_angle_deg)
+            else:
+                _seed_widget("plastic_na_angle_deg", float(plot_options.get("plastic_na_angle_deg", 0.0)))
+                st.number_input("Plastic NA angle (deg)", key="plastic_na_angle_deg")
+                plot_options["plastic_na_angle_deg"] = float(st.session_state.plastic_na_angle_deg)
+                st.info("Run plastic analysis to enable angle selection from computed sweep results.")
 
     with st.expander("Geometry validation", expanded=True):
         topo = validate_geometry_topology(data["geometry"])

@@ -125,13 +125,15 @@ def _input_hash(data: dict) -> str:
 
 
 def main():
-    st.set_page_config(page_title="RCSect", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title="RCSect", page_icon="🏗", layout="wide", initial_sidebar_state="expanded")
     st.title("RCSect: Reinforced Concrete Section Analysis")
 
     initialize_session_state()
     render_sidebar()
 
     data = st.session_state.data
+    current_hash = _input_hash(data)
+    st.session_state["current_input_hash"] = current_hash
     mode = data["analysis_settings"]["mode"]
     auto_run = bool(data["analysis_settings"].get("auto_run", True))
 
@@ -139,7 +141,7 @@ def main():
 
     with col_canvas:
         st.subheader("Cross-Section Geometry")
-        render_geometry_plot()
+        canvas_container = st.container()
 
     with col_results:
         st.subheader("Analysis Results")
@@ -149,7 +151,6 @@ def main():
         if not can_run_analysis:
             st.warning("Please define the concrete geometry to run the analysis.")
 
-        current_hash = _input_hash(data)
         cached = st.session_state.get("last_results_cache", {})
 
         should_compute = auto_run and can_run_analysis
@@ -194,6 +195,10 @@ def main():
                         render_plastic_export(item["case_name"], item["result"])
         elif not auto_run and can_run_analysis and cached.get("hash") != current_hash:
             st.info("Analysis inputs changed. Click 'Run analysis' to refresh results.")
+
+
+    with canvas_container:
+        render_geometry_plot()
 
     handle_autosave()
 

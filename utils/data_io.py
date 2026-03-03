@@ -138,6 +138,15 @@ def _get_default_schema():
             "show_mild_bar_ids": False,
             "show_prestressed_bar_ids": False,
             "scale_bar_markers_by_area": False,
+            "show_centroid": True,
+            "show_principal_axes": False,
+            "show_elastic_na": True,
+            "elastic_na_case_id": 1,
+            "elastic_na_state": "RST1",
+            "show_plastic_na": False,
+            "plastic_na_case_id": 1,
+            "plastic_na_angle_deg": 0.0,
+            "overlay_line_width": 2.0,
         },
         "load_cases": {
             "elastic": [
@@ -166,6 +175,11 @@ def _get_default_schema():
             ],
         },
     }
+
+
+def _merge_plot_options_defaults(data: dict) -> None:
+    default_plot_opts = _get_default_schema()["plot_options"]
+    data["plot_options"] = {**default_plot_opts, **data.get("plot_options", {})}
 
 
 def _normalize_load_cases(load_cases):
@@ -300,7 +314,7 @@ def initialize_session_state():
     data["analysis_settings"].setdefault("autosave_history_interval_seconds", 300)
     data["analysis_settings"].setdefault("autosave_history_max_files", 20)
     data["load_cases"] = _normalize_load_cases(data.get("load_cases"))
-    data.setdefault("plot_options", defaults["plot_options"])
+    _merge_plot_options_defaults(data)
     data.setdefault("geometry", defaults["geometry"])
     data["geometry"] = normalize_geometry_for_use(data["geometry"])
 

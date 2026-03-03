@@ -131,7 +131,17 @@ class ElasticSolver:
             "RST_total": total_stresses,
             "LONG_s1": s1,
             "RST1_s3": s3,
-            "DIF": {bar_id: total_stresses[bar_id] - s1[bar_id] for bar_id in s1}
+            "DIF": {bar_id: total_stresses[bar_id] - s1[bar_id] for bar_id in s1},
+            "na_LONG": {
+                "eps0": float(res_long["eps0"]),
+                "kx": float(res_long["kx"]),
+                "ky": float(res_long["ky"]),
+            },
+            "na_RST1": {
+                "eps0": float(res_comb["eps0"]),
+                "kx": float(res_comb["kx"]),
+                "ky": float(res_comb["ky"]),
+            },
         }
 
     def _compression_zone(self, eps0, kx, ky):
