@@ -104,6 +104,8 @@ def _get_default_schema():
         "analysis_settings": {
             "mode": "Both",
             "auto_run": True,
+            "gamma_E": 1.0,
+            "gamma_u": 1.0,
             "autosave_enabled": True,
             "autosave_interval_seconds": 60,
             "autosave_history_enabled": True,
@@ -114,6 +116,8 @@ def _get_default_schema():
             "concrete": {"f_ck": 30.0, "gamma_c": 1.45, "alpha_cc": 1.0, "E_c_GPa": 33.0},
             "mild_steel": {
                 "f_yk": 500.0,
+                "f_yk_t_MPa": 500.0,
+                "f_yk_c_MPa": 500.0,
                 "gamma_s": 1.20,
                 "e_uk": 0.05,
                 "E_s_GPa": 200.0,
@@ -311,6 +315,8 @@ def initialize_session_state():
     data.setdefault("analysis_settings", {})
     data["analysis_settings"].setdefault("mode", defaults["analysis_settings"]["mode"])
     data["analysis_settings"].setdefault("auto_run", defaults["analysis_settings"]["auto_run"])
+    data["analysis_settings"].setdefault("gamma_E", defaults["analysis_settings"]["gamma_E"])
+    data["analysis_settings"].setdefault("gamma_u", defaults["analysis_settings"]["gamma_u"])
     data["analysis_settings"].setdefault("autosave_enabled", True)
     data["analysis_settings"].setdefault("autosave_interval_seconds", 60)
     data["analysis_settings"].setdefault("autosave_history_enabled", True)
@@ -324,6 +330,8 @@ def initialize_session_state():
     prestressed_steel = materials.setdefault("prestressed_steel", {})
     concrete.setdefault("E_c_GPa", defaults["materials"]["concrete"]["E_c_GPa"])
     mild_steel.setdefault("E_s_GPa", defaults["materials"]["mild_steel"]["E_s_GPa"])
+    mild_steel.setdefault("f_yk_t_MPa", mild_steel.get("f_yk", defaults["materials"]["mild_steel"]["f_yk"]))
+    mild_steel.setdefault("f_yk_c_MPa", mild_steel.get("f_yk", defaults["materials"]["mild_steel"]["f_yk"]))
     prestressed_steel.setdefault("E_p_GPa", defaults["materials"]["prestressed_steel"].get("E_p_GPa", 195.0))
 
     old_concrete_ec = concrete.pop("E_c", None)

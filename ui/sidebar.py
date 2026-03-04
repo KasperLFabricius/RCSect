@@ -129,6 +129,25 @@ def render_sidebar():
     st.sidebar.checkbox("Auto-run analysis", key="analysis_auto_run")
     settings["auto_run"] = bool(st.session_state.analysis_auto_run)
 
+    st.sidebar.markdown("---")
+    st.sidebar.caption("Elastic modulus factor")
+    _seed_widget("gamma_E", settings.get("gamma_E", 1.0))
+    st.sidebar.markdown(r"$\gamma_E$ [-]")
+    st.sidebar.number_input("gamma_E", min_value=0.1, step=0.05, key="gamma_E", label_visibility="collapsed")
+    settings["gamma_E"] = float(st.session_state.gamma_E)
+
+    _seed_widget("gamma_u", settings.get("gamma_u", 1.0))
+    st.sidebar.markdown(r"$\gamma_u$ [-]")
+    st.sidebar.number_input(
+        "gamma_u",
+        min_value=0.1,
+        step=0.05,
+        key="gamma_u",
+        help="Stored for legacy parity; currently not applied to solver unless enabled.",
+        label_visibility="collapsed",
+    )
+    settings["gamma_u"] = float(st.session_state.gamma_u)
+
     _seed_widget("autosave_enabled", settings.get("autosave_enabled", True))
     st.sidebar.checkbox("Enable autosave", key="autosave_enabled")
     settings["autosave_enabled"] = bool(st.session_state.autosave_enabled)
@@ -255,6 +274,9 @@ def _render_material_inputs():
     with st.expander("Mild Reinforcement", expanded=False):
         st.caption("EC2 Section 3.2 · DK NA safety factors")
         _seed_widget("mat_fyk", mats["mild_steel"]["f_yk"])
+        _seed_widget("mat_use_split_fyk", False)
+        _seed_widget("mat_fyk_t", mats["mild_steel"].get("f_yk_t_MPa", mats["mild_steel"]["f_yk"]))
+        _seed_widget("mat_fyk_c", mats["mild_steel"].get("f_yk_c_MPa", mats["mild_steel"]["f_yk"]))
         _seed_widget("mat_es_gpa", mats["mild_steel"].get("E_s_GPa", 200.0))
         _seed_widget("mat_gamma_s", mats["mild_steel"]["gamma_s"])
         _seed_widget("mat_euk_pm", mats["mild_steel"]["e_uk"] * 1000.0)
@@ -263,6 +285,11 @@ def _render_material_inputs():
 
         st.markdown(r"$f_{yk}$ [MPa]")
         st.number_input("f_yk", min_value=200.0, key="mat_fyk", label_visibility="collapsed")
+        st.checkbox("Use separate $f_{yk,t}$ and $f_{yk,c}$", key="mat_use_split_fyk")
+        st.markdown(r"$f_{yk,t}$ [MPa]")
+        st.number_input("f_yk_t", min_value=200.0, key="mat_fyk_t", label_visibility="collapsed")
+        st.markdown(r"$f_{yk,c}$ [MPa]")
+        st.number_input("f_yk_c", min_value=200.0, key="mat_fyk_c", label_visibility="collapsed")
         st.markdown(r"$E_s$ [GPa]")
         st.number_input("E_s", min_value=1.0, key="mat_es_gpa", label_visibility="collapsed")
         st.markdown(r"$\gamma_s$ [-]")
@@ -275,6 +302,12 @@ def _render_material_inputs():
             st.number_input("f_uk", min_value=float(st.session_state.mat_fyk), key="mat_fuk", label_visibility="collapsed")
 
         mats["mild_steel"]["f_yk"] = float(st.session_state.mat_fyk)
+        if bool(st.session_state.mat_use_split_fyk):
+            mats["mild_steel"]["f_yk_t_MPa"] = float(st.session_state.mat_fyk_t)
+            mats["mild_steel"]["f_yk_c_MPa"] = float(st.session_state.mat_fyk_c)
+        else:
+            mats["mild_steel"]["f_yk_t_MPa"] = float(st.session_state.mat_fyk)
+            mats["mild_steel"]["f_yk_c_MPa"] = float(st.session_state.mat_fyk)
         mats["mild_steel"]["E_s_GPa"] = float(st.session_state.mat_es_gpa)
         mats["mild_steel"]["gamma_s"] = float(st.session_state.mat_gamma_s)
         mats["mild_steel"]["e_uk"] = float(st.session_state.mat_euk_pm) / 1000.0
