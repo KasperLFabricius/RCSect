@@ -18,6 +18,8 @@ from core.geometry import CrossSection
 from core.materials import Concrete, MildSteel, PrestressedSteel
 from core.solver_elastic import ElasticSolver
 from core.solver_plastic import PlasticSolver
+from utils.units import gpa_to_mpa
+
 
 
 def build_computational_models(data):
@@ -28,6 +30,7 @@ def build_computational_models(data):
     mild_steel = MildSteel(
         f_yk=mat_s["f_yk"],
         gamma_s=mat_s["gamma_s"],
+        E_s=gpa_to_mpa(mat_s.get("E_s_GPa", 200.0)),
         e_uk=mat_s["e_uk"],
         f_uk=mat_s.get("f_uk", None),
         include_hardening=mat_s.get("include_hardening", False),
@@ -42,6 +45,7 @@ def build_computational_models(data):
             initial_strain=mat_p["initial_strain"],
             e_uk=mat_p["e_uk"],
             gamma_s=mat_p["gamma_p"],
+            E_p=gpa_to_mpa(mat_p.get("E_p_GPa", 195.0)),
         )
 
     cross_section = CrossSection(
@@ -64,7 +68,13 @@ def _compute_results(data: dict):
     computed = {"can_run": True, "elastic": [], "plastic": []}
 
     if mode in ["Elastic", "Both"]:
-        elastic_engine = ElasticSolver(cross_section=cs, E_c=33000.0, E_s=200000.0)
+        mat_c = data["materials"]["concrete"]
+        mat_s = data["materials"]["mild_steel"]
+        elastic_engine = ElasticSolver(
+            cross_section=cs,
+            E_c=gpa_to_mpa(mat_c.get("E_c_GPa", 33.0)),
+            E_s=gpa_to_mpa(mat_s.get("E_s_GPa", 200.0)),
+        )
         for case in data.get("load_cases", {}).get("elastic", []):
             case_name = case.get("name", "Unnamed")
             try:
@@ -113,8 +123,10 @@ def _compute_results(data: dict):
 
 
 def _input_hash(data: dict) -> str:
+    analysis_settings = dict(data.get("analysis_settings", {}))
+    analysis_settings.pop("auto_run", None)
     payload = {
-        "analysis_settings": data.get("analysis_settings", {}),
+        "analysis_settings": analysis_settings,
         "materials": data.get("materials", {}),
         "geometry": data.get("geometry", {}),
         "load_cases": data.get("load_cases", {}),
@@ -123,13 +135,15 @@ def _input_hash(data: dict) -> str:
 
 
 def main():
-    st.set_page_config(page_title="RCSect", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title="RCSect", page_icon="🏗", layout="wide", initial_sidebar_state="expanded")
     st.title("RCSect: Reinforced Concrete Section Analysis")
 
     initialize_session_state()
     render_sidebar()
 
     data = st.session_state.data
+    current_hash = _input_hash(data)
+    st.session_state["current_input_hash"] = current_hash
     mode = data["analysis_settings"]["mode"]
     auto_run = bool(data["analysis_settings"].get("auto_run", True))
 
@@ -137,7 +151,7 @@ def main():
 
     with col_canvas:
         st.subheader("Cross-Section Geometry")
-        render_geometry_plot()
+        canvas_container = st.container()
 
     with col_results:
         st.subheader("Analysis Results")
@@ -147,7 +161,6 @@ def main():
         if not can_run_analysis:
             st.warning("Please define the concrete geometry to run the analysis.")
 
-        current_hash = _input_hash(data)
         cached = st.session_state.get("last_results_cache", {})
 
         should_compute = auto_run and can_run_analysis
@@ -192,6 +205,10 @@ def main():
                         render_plastic_export(item["case_name"], item["result"])
         elif not auto_run and can_run_analysis and cached.get("hash") != current_hash:
             st.info("Analysis inputs changed. Click 'Run analysis' to refresh results.")
+
+
+    with canvas_container:
+        render_geometry_plot()
 
     handle_autosave()
 
