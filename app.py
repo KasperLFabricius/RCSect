@@ -21,6 +21,7 @@ from core.solver_plastic import PlasticSolver
 from utils.units import gpa_to_mpa
 
 
+
 def build_computational_models(data):
     mat_c = data["materials"]["concrete"]
     concrete = Concrete(f_ck=mat_c["f_ck"], gamma_c=mat_c["gamma_c"], alpha_cc=mat_c["alpha_cc"])
