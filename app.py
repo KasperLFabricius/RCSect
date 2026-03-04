@@ -23,14 +23,20 @@ from utils.units import gpa_to_mpa
 
 
 def build_computational_models(data):
+    settings = data.get("analysis_settings", {})
+    gamma_e = float(settings.get("gamma_E", 1.0))
+
     mat_c = data["materials"]["concrete"]
     concrete = Concrete(f_ck=mat_c["f_ck"], gamma_c=mat_c["gamma_c"], alpha_cc=mat_c["alpha_cc"])
 
     mat_s = data["materials"]["mild_steel"]
+    e_s_eff_mpa = gpa_to_mpa(mat_s.get("E_s_GPa", 200.0)) / gamma_e
     mild_steel = MildSteel(
         f_yk=mat_s["f_yk"],
+        f_yk_t=mat_s.get("f_yk_t_MPa", mat_s["f_yk"]),
+        f_yk_c=mat_s.get("f_yk_c_MPa", mat_s["f_yk"]),
         gamma_s=mat_s["gamma_s"],
-        E_s=gpa_to_mpa(mat_s.get("E_s_GPa", 200.0)),
+        E_s=e_s_eff_mpa,
         e_uk=mat_s["e_uk"],
         f_uk=mat_s.get("f_uk", None),
         include_hardening=mat_s.get("include_hardening", False),
@@ -39,13 +45,14 @@ def build_computational_models(data):
     mat_p = data["materials"]["prestressed_steel"]
     prestressed_steel = None
     if data["geometry"].get("reinforcement_prestressed"):
+        e_p_eff_mpa = gpa_to_mpa(mat_p.get("E_p_GPa", 195.0)) / gamma_e
         prestressed_steel = PrestressedSteel(
             f_p01k=mat_p["f_p01k"],
             f_pk=mat_p["f_pk"],
             initial_strain=mat_p["initial_strain"],
             e_uk=mat_p["e_uk"],
             gamma_s=mat_p["gamma_p"],
-            E_p=gpa_to_mpa(mat_p.get("E_p_GPa", 195.0)),
+            E_p=e_p_eff_mpa,
         )
 
     cross_section = CrossSection(
@@ -70,10 +77,13 @@ def _compute_results(data: dict):
     if mode in ["Elastic", "Both"]:
         mat_c = data["materials"]["concrete"]
         mat_s = data["materials"]["mild_steel"]
+        gamma_e = float(data.get("analysis_settings", {}).get("gamma_E", 1.0))
+        e_c_eff_mpa = gpa_to_mpa(mat_c.get("E_c_GPa", 33.0)) / gamma_e
+        e_s_eff_mpa = gpa_to_mpa(mat_s.get("E_s_GPa", 200.0)) / gamma_e
         elastic_engine = ElasticSolver(
             cross_section=cs,
-            E_c=gpa_to_mpa(mat_c.get("E_c_GPa", 33.0)),
-            E_s=gpa_to_mpa(mat_s.get("E_s_GPa", 200.0)),
+            E_c=e_c_eff_mpa,
+            E_s=e_s_eff_mpa,
         )
         for case in data.get("load_cases", {}).get("elastic", []):
             case_name = case.get("name", "Unnamed")
@@ -186,7 +196,7 @@ def main():
                         st.error(f"Elastic Solver Error: {item['error']}")
                     else:
                         render_elastic_results(item["result"])
-                        render_elastic_export(item["case_name"], item["result"])
+                        render_elastic_export(item["case_name"], item["result"], data)
 
         st.divider()
 
@@ -202,7 +212,7 @@ def main():
                         st.error(f"Plastic Solver Error: {item['error']}")
                     else:
                         render_plastic_results(item["result"], item["target_P"])
-                        render_plastic_export(item["case_name"], item["result"])
+                        render_plastic_export(item["case_name"], item["result"], data)
         elif not auto_run and can_run_analysis and cached.get("hash") != current_hash:
             st.info("Analysis inputs changed. Click 'Run analysis' to refresh results.")
 

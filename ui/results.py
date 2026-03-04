@@ -90,8 +90,18 @@ def render_elastic_results(elastic_output: dict):
         st.info("No reinforcement data available.")
 
 
-def render_elastic_export(case_name: str, elastic_output: dict):
+def render_elastic_export(case_name: str, elastic_output: dict, data: dict | None = None):
     rows = []
+    settings = (data or {}).get("analysis_settings", {})
+    mild = ((data or {}).get("materials", {})).get("mild_steel", {})
+    rows.extend(
+        [
+            {"metric": "meta", "item": "gamma_E", "value": settings.get("gamma_E", 1.0)},
+            {"metric": "meta", "item": "gamma_u", "value": settings.get("gamma_u", 1.0)},
+            {"metric": "meta", "item": "f_yk_t_MPa", "value": mild.get("f_yk_t_MPa", mild.get("f_yk", 500.0))},
+            {"metric": "meta", "item": "f_yk_c_MPa", "value": mild.get("f_yk_c_MPa", mild.get("f_yk", 500.0))},
+        ]
+    )
     max_c = kn_m2_to_mpa(elastic_output.get("max_concrete", 0.0))
     rows.append({"metric": "sigma_c_max_MPa", "item": "", "value": max_c})
 
@@ -201,12 +211,23 @@ def render_plastic_results(plastic_output: list, target_P: float):
     )
 
 
-def render_plastic_export(case_name: str, plastic_output: list):
+def render_plastic_export(case_name: str, plastic_output: list, data: dict | None = None):
     df_plastic = pd.DataFrame(plastic_output)
     df_plastic = df_plastic.rename(columns={"Mx": "Mx_kNm", "My": "My_kNm", "V": "V_deg", "y_na": "y_na_m", "kappa": "kappa_1_per_m"})
+    settings = (data or {}).get("analysis_settings", {})
+    mild = ((data or {}).get("materials", {})).get("mild_steel", {})
+    meta_df = pd.DataFrame(
+        [
+            {"meta": "gamma_E", "value": settings.get("gamma_E", 1.0)},
+            {"meta": "gamma_u", "value": settings.get("gamma_u", 1.0)},
+            {"meta": "f_yk_t_MPa", "value": mild.get("f_yk_t_MPa", mild.get("f_yk", 500.0))},
+            {"meta": "f_yk_c_MPa", "value": mild.get("f_yk_c_MPa", mild.get("f_yk", 500.0))},
+        ]
+    )
+    df_export = pd.concat([meta_df, pd.DataFrame([{}]), df_plastic], ignore_index=True, sort=False)
     st.download_button(
         f"Download plastic CSV: {case_name}",
-        data=_to_csv_bytes(df_plastic),
+        data=_to_csv_bytes(df_export),
         file_name=f"plastic_{case_name.replace(' ', '_')}.csv",
         mime="text/csv",
     )

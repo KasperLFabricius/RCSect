@@ -49,21 +49,36 @@ class MildSteel:
     Supports both horizontal top branch and inclined strain-hardening branch.
     Strains are treated as positive for tension.
     """
-    def __init__(self, f_yk: float, gamma_s: float = 1.20, E_s: float = 200000.0, 
-                 e_uk: float = 0.02, f_uk: float = None, include_hardening: bool = False):
+    def __init__(
+        self,
+        f_yk: float,
+        gamma_s: float = 1.20,
+        E_s: float = 200000.0,
+        e_uk: float = 0.02,
+        f_uk: float = None,
+        include_hardening: bool = False,
+        f_yk_t: float = None,
+        f_yk_c: float = None,
+    ):
         self.f_yk = f_yk
+        self.f_yk_t = f_yk if f_yk_t is None else f_yk_t
+        self.f_yk_c = f_yk if f_yk_c is None else f_yk_c
         self.gamma_s = gamma_s
         self.E_s = E_s
-        self.f_yd = self.f_yk / self.gamma_s
-        self.eps_yd = self.f_yd / self.E_s
+        self.f_yd_t = self.f_yk_t / self.gamma_s
+        self.f_yd_c = self.f_yk_c / self.gamma_s
+        self.eps_yd_t = self.f_yd_t / self.E_s
+        self.eps_yd_c = self.f_yd_c / self.E_s
         self.eps_ud = 0.9 * e_uk  # Design ultimate strain limit per EC2
-        
+
         self.include_hardening = include_hardening
         if self.include_hardening and f_uk is not None:
             self.k = f_uk / f_yk
-            self.f_ud = (self.k * self.f_yk) / self.gamma_s
+            self.f_ud_t = (self.k * self.f_yk_t) / self.gamma_s
+            self.f_ud_c = (self.k * self.f_yk_c) / self.gamma_s
         else:
-            self.f_ud = self.f_yd
+            self.f_ud_t = self.f_yd_t
+            self.f_ud_c = self.f_yd_c
 
     def stress(self, eps: np.ndarray) -> np.ndarray:
         """
@@ -72,27 +87,32 @@ class MildSteel:
         """
         eps = np.asarray(eps)
         sigma = np.zeros_like(eps, dtype=float)
-        
-        # Absolute strain for symmetric behavior
-        abs_eps = np.abs(eps)
-        sign_eps = np.sign(eps)
-        
-        # Elastic branch
-        mask_elastic = abs_eps <= self.eps_yd
-        sigma[mask_elastic] = eps[mask_elastic] * self.E_s
-        
-        # Yield / Hardening branch
-        mask_yield = (abs_eps > self.eps_yd) & (abs_eps <= self.eps_ud)
+
+        mask_tension = eps >= 0.0
+        mask_compression = eps < 0.0
+
+        # Elastic branches
+        mask_elastic_t = mask_tension & (eps <= self.eps_yd_t)
+        mask_elastic_c = mask_compression & (np.abs(eps) <= self.eps_yd_c)
+        sigma[mask_elastic_t] = eps[mask_elastic_t] * self.E_s
+        sigma[mask_elastic_c] = eps[mask_elastic_c] * self.E_s
+
+        # Yield / hardening branches
+        mask_yield_t = mask_tension & (eps > self.eps_yd_t) & (eps <= self.eps_ud)
+        mask_yield_c = mask_compression & (np.abs(eps) > self.eps_yd_c) & (np.abs(eps) <= self.eps_ud)
         if self.include_hardening:
-            slope = (self.f_ud - self.f_yd) / (self.eps_ud - self.eps_yd)
-            sigma[mask_yield] = sign_eps[mask_yield] * (self.f_yd + slope * (abs_eps[mask_yield] - self.eps_yd))
+            slope_t = 0.0 if self.eps_ud == self.eps_yd_t else (self.f_ud_t - self.f_yd_t) / (self.eps_ud - self.eps_yd_t)
+            slope_c = 0.0 if self.eps_ud == self.eps_yd_c else (self.f_ud_c - self.f_yd_c) / (self.eps_ud - self.eps_yd_c)
+            sigma[mask_yield_t] = self.f_yd_t + slope_t * (eps[mask_yield_t] - self.eps_yd_t)
+            sigma[mask_yield_c] = -(self.f_yd_c + slope_c * (np.abs(eps[mask_yield_c]) - self.eps_yd_c))
         else:
-            sigma[mask_yield] = sign_eps[mask_yield] * self.f_yd
-            
+            sigma[mask_yield_t] = self.f_yd_t
+            sigma[mask_yield_c] = -self.f_yd_c
+
         # Ruptured steel
-        mask_rupture = abs_eps > self.eps_ud
+        mask_rupture = np.abs(eps) > self.eps_ud
         sigma[mask_rupture] = 0.0
-        
+
         return sigma
 
 class PrestressedSteel:
