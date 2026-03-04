@@ -86,6 +86,7 @@ class MildSteel:
         Handles both tension (positive) and compression (negative).
         """
         eps = np.asarray(eps)
+        abs_eps = np.abs(eps)
         sigma = np.zeros_like(eps, dtype=float)
 
         mask_tension = eps >= 0.0
@@ -93,24 +94,24 @@ class MildSteel:
 
         # Elastic branches
         mask_elastic_t = mask_tension & (eps <= self.eps_yd_t)
-        mask_elastic_c = mask_compression & (np.abs(eps) <= self.eps_yd_c)
+        mask_elastic_c = mask_compression & (abs_eps <= self.eps_yd_c)
         sigma[mask_elastic_t] = eps[mask_elastic_t] * self.E_s
         sigma[mask_elastic_c] = eps[mask_elastic_c] * self.E_s
 
         # Yield / hardening branches
         mask_yield_t = mask_tension & (eps > self.eps_yd_t) & (eps <= self.eps_ud)
-        mask_yield_c = mask_compression & (np.abs(eps) > self.eps_yd_c) & (np.abs(eps) <= self.eps_ud)
+        mask_yield_c = mask_compression & (abs_eps > self.eps_yd_c) & (abs_eps <= self.eps_ud)
         if self.include_hardening:
             slope_t = 0.0 if self.eps_ud == self.eps_yd_t else (self.f_ud_t - self.f_yd_t) / (self.eps_ud - self.eps_yd_t)
             slope_c = 0.0 if self.eps_ud == self.eps_yd_c else (self.f_ud_c - self.f_yd_c) / (self.eps_ud - self.eps_yd_c)
             sigma[mask_yield_t] = self.f_yd_t + slope_t * (eps[mask_yield_t] - self.eps_yd_t)
-            sigma[mask_yield_c] = -(self.f_yd_c + slope_c * (np.abs(eps[mask_yield_c]) - self.eps_yd_c))
+            sigma[mask_yield_c] = -(self.f_yd_c + slope_c * (abs_eps[mask_yield_c] - self.eps_yd_c))
         else:
             sigma[mask_yield_t] = self.f_yd_t
             sigma[mask_yield_c] = -self.f_yd_c
 
         # Ruptured steel
-        mask_rupture = np.abs(eps) > self.eps_ud
+        mask_rupture = abs_eps > self.eps_ud
         sigma[mask_rupture] = 0.0
 
         return sigma
