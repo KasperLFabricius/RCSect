@@ -1,9 +1,11 @@
 import copy
 import json
+import math
 import os
 import time
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 from shapely.geometry import LinearRing, Point, Polygon
 from shapely.validation import explain_validity
@@ -15,18 +17,24 @@ AUTOSAVE_HISTORY_DIR = "autosaves"
 
 def _coerce_float(value):
     try:
-        if value in (None, ""):
+        if value in (None, "") or pd.isna(value):
             return None
-        return float(value)
+        numeric = float(value)
+        if pd.isna(numeric) or not math.isfinite(numeric):
+            return None
+        return numeric
     except (TypeError, ValueError):
         return None
 
 
 def _coerce_int(value):
     try:
-        if value in (None, ""):
+        if value in (None, "") or pd.isna(value):
             return None
-        return int(float(value))
+        numeric = float(value)
+        if pd.isna(numeric) or not math.isfinite(numeric):
+            return None
+        return int(numeric)
     except (TypeError, ValueError):
         return None
 
@@ -418,6 +426,17 @@ def validate_geometry_topology(geometry_data):
     if len(outline_pts) < 3:
         result["warnings"].append(
             "Outline has fewer than 3 points; add at least 3 points to define a valid polygon."
+        )
+        return result
+
+    invalid_outline_rows = [
+        idx
+        for idx, pt in enumerate(outline_pts, start=1)
+        if _coerce_float(pt.get("x")) is None or _coerce_float(pt.get("y")) is None
+    ]
+    if invalid_outline_rows:
+        result["errors"].append(
+            "Outline contains an empty/invalid row (NaN). Remove the blank row or fill both x and y."
         )
         return result
 
