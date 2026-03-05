@@ -423,6 +423,8 @@ def _render_geometry_inputs():
     df_mild["id"] = pd.to_numeric(df_mild["id"], errors="coerce").astype("Int64")
     for col in ["x", "y", "area"]:
         df_mild[col] = pd.to_numeric(df_mild[col], errors="coerce")
+    df_mild["id"] = df_mild["id"].astype("string")
+    df_mild["id"] = df_mild["id"].fillna("")
     edited_mild = st.data_editor(
         df_mild,
         num_rows="dynamic",
@@ -430,6 +432,7 @@ def _render_geometry_inputs():
         key="editor_mild",
         column_config={"x": "x [m]", "y": "y [m]", "area": "A [mm²]"},
     )
+    edited_mild["id"] = pd.to_numeric(edited_mild["id"], errors="coerce").astype("Int64")
     geom["reinforcement_mild"] = coerce_rebar_rows(edited_mild.to_dict("records"))
 
     st.write("**Prestressed Steel**")
@@ -440,6 +443,8 @@ def _render_geometry_inputs():
         df_pre[col] = pd.to_numeric(df_pre[col], errors="coerce")
     if not df_pre.empty and "eps0" in df_pre.columns:
         df_pre["eps0"] = df_pre["eps0"] * 1000.0
+    df_pre["id"] = df_pre["id"].astype("string")
+    df_pre["id"] = df_pre["id"].fillna("")
     edited_pre = st.data_editor(
         df_pre,
         num_rows="dynamic",
@@ -447,6 +452,7 @@ def _render_geometry_inputs():
         key="editor_pre",
         column_config={"x": "x [m]", "y": "y [m]", "area": "A [mm²]", "eps0": "εp,0 [‰]"},
     )
+    edited_pre["id"] = pd.to_numeric(edited_pre["id"], errors="coerce").astype("Int64")
     if "eps0" in edited_pre.columns:
         edited_pre["eps0"] = pd.to_numeric(edited_pre["eps0"], errors="coerce") / 1000.0
     geom["reinforcement_prestressed"] = coerce_rebar_rows(edited_pre.to_dict("records"), include_eps0=True)
@@ -596,6 +602,8 @@ def _render_load_case_inputs():
         df_elastic["id"] = pd.to_numeric(df_elastic["id"], errors="coerce").astype("Int64")
         for col in ["P_l", "Mx_l", "My_l", "n_l", "P_s", "Mx_s", "My_s", "n_s"]:
             df_elastic[col] = pd.to_numeric(df_elastic[col], errors="coerce")
+        df_elastic["id"] = df_elastic["id"].astype("string")
+        df_elastic["id"] = df_elastic["id"].fillna("")
         edited_elastic = st.data_editor(
             df_elastic,
             num_rows="dynamic",
@@ -606,6 +614,7 @@ def _render_load_case_inputs():
                 "P_s": "P_s [kN]", "Mx_s": "Mx_s [kNm]", "My_s": "My_s [kNm]", "n_s": "n_s [-]",
             },
         )
+        edited_elastic["id"] = pd.to_numeric(edited_elastic["id"], errors="coerce").astype("Int64")
         data["load_cases"]["elastic"] = edited_elastic.to_dict("records")
 
         add_col, rm_col = st.columns(2)
@@ -642,6 +651,8 @@ def _render_load_case_inputs():
         df_plastic["id"] = pd.to_numeric(df_plastic["id"], errors="coerce").astype("Int64")
         for col in ["P_target", "v_min", "v_max", "v_inc"]:
             df_plastic[col] = pd.to_numeric(df_plastic[col], errors="coerce")
+        df_plastic["id"] = df_plastic["id"].astype("string")
+        df_plastic["id"] = df_plastic["id"].fillna("")
         edited_plastic = st.data_editor(
             df_plastic,
             num_rows="dynamic",
@@ -649,6 +660,7 @@ def _render_load_case_inputs():
             key="editor_load_cases_plastic",
             column_config={"P_target": "P [kN]", "v_min": "V_min [deg]", "v_max": "V_max [deg]", "v_inc": "ΔV [deg]"},
         )
+        edited_plastic["id"] = pd.to_numeric(edited_plastic["id"], errors="coerce").astype("Int64")
         data["load_cases"]["plastic"] = edited_plastic.to_dict("records")
 
         add_col, rm_col = st.columns(2)

@@ -63,10 +63,10 @@ def render_elastic_results(elastic_output: dict):
     col1, col2 = st.columns(2)
     with col1:
         st.markdown(r"$\sigma_{c,\max}\ [\mathrm{MPa}]$")
-        st.metric(label="", value=f"{max_c_mpa:.3f}", label_visibility="collapsed")
+        st.metric(label="sigma_c_max", value=f"{max_c_mpa:.3f}", label_visibility="collapsed")
     with col2:
         st.markdown(r"$\sigma_{s,\max,\mathrm{TOTAL}}\ [\mathrm{MPa}]$")
-        st.metric(label="", value=f"{max_tension_mpa:.3f}", label_visibility="collapsed")
+        st.metric(label="sigma_s_max_total", value=f"{max_tension_mpa:.3f}", label_visibility="collapsed")
 
     st.markdown("#### Individual bar stresses")
     table_data = []
