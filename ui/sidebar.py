@@ -420,6 +420,9 @@ def _render_geometry_inputs():
     st.write("**Mild Steel**")
     st.caption("Units: x, y in m; A in mm²")
     df_mild = pd.DataFrame(geom.get("reinforcement_mild", []), columns=["id", "x", "y", "area"])
+    df_mild["id"] = pd.to_numeric(df_mild["id"], errors="coerce").astype("Int64")
+    for col in ["x", "y", "area"]:
+        df_mild[col] = pd.to_numeric(df_mild[col], errors="coerce")
     edited_mild = st.data_editor(
         df_mild,
         num_rows="dynamic",
@@ -432,8 +435,11 @@ def _render_geometry_inputs():
     st.write("**Prestressed Steel**")
     st.caption("Units: x, y in m; A in mm²; εp,0 in ‰")
     df_pre = pd.DataFrame(geom.get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"])
+    df_pre["id"] = pd.to_numeric(df_pre["id"], errors="coerce").astype("Int64")
+    for col in ["x", "y", "area", "eps0"]:
+        df_pre[col] = pd.to_numeric(df_pre[col], errors="coerce")
     if not df_pre.empty and "eps0" in df_pre.columns:
-        df_pre["eps0"] = pd.to_numeric(df_pre["eps0"], errors="coerce") * 1000.0
+        df_pre["eps0"] = df_pre["eps0"] * 1000.0
     edited_pre = st.data_editor(
         df_pre,
         num_rows="dynamic",
@@ -587,6 +593,9 @@ def _render_load_case_inputs():
         st.write("**Elastic load cases**")
         st.caption("Units: P in kN, Mx/My in kNm, n as [-]")
         df_elastic = pd.DataFrame(data["load_cases"].get("elastic", []), columns=elastic_columns)
+        df_elastic["id"] = pd.to_numeric(df_elastic["id"], errors="coerce").astype("Int64")
+        for col in ["P_l", "Mx_l", "My_l", "n_l", "P_s", "Mx_s", "My_s", "n_s"]:
+            df_elastic[col] = pd.to_numeric(df_elastic[col], errors="coerce")
         edited_elastic = st.data_editor(
             df_elastic,
             num_rows="dynamic",
@@ -630,6 +639,9 @@ def _render_load_case_inputs():
         st.write("**Plastic load cases**")
         st.caption("Units: P in kN; V angles in deg")
         df_plastic = pd.DataFrame(data["load_cases"].get("plastic", []), columns=plastic_columns)
+        df_plastic["id"] = pd.to_numeric(df_plastic["id"], errors="coerce").astype("Int64")
+        for col in ["P_target", "v_min", "v_max", "v_inc"]:
+            df_plastic[col] = pd.to_numeric(df_plastic[col], errors="coerce")
         edited_plastic = st.data_editor(
             df_plastic,
             num_rows="dynamic",

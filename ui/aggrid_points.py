@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 from st_aggrid import AgGrid
 
@@ -7,10 +9,15 @@ from st_aggrid import AgGrid
 def _coerce_numeric(value):
     if value is None:
         return None
+    if pd.isna(value):
+        return None
     if isinstance(value, str) and not value.strip():
         return None
     try:
-        return float(value)
+        numeric = float(value)
+        if pd.isna(numeric) or not math.isfinite(numeric):
+            return None
+        return numeric
     except (TypeError, ValueError):
         return None
 
