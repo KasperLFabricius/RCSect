@@ -436,7 +436,7 @@ def validate_geometry_topology(geometry_data):
     ]
     if invalid_outline_rows:
         result["errors"].append(
-            "Outline contains an empty/invalid row (NaN). Remove the blank row or fill both x and y."
+            "Outline contains an empty/invalid row (NaN).\nRemove the blank row or fill both x and y."
         )
         return result
 
