@@ -345,7 +345,6 @@ class PlasticSolver:
                 for tri in triangulate(geom):
                     tri_clip = tri.intersection(geom)
                     integrate_geom(tri_clip)
-                return
 
             for sub_geom in getattr(geom, "geoms", []):
                 integrate_geom(sub_geom)
