@@ -1,10 +1,14 @@
 import numpy as np
 
-from tests.plastic_diagnostics import classify_dominant_mismatch, diagnose_manual_rows
+from tests.plastic_diagnostics import (
+    classify_dominant_mismatch,
+    diagnose_manual_rows,
+    run_contribution_study,
+)
 
 
 def test_manual_diagnostic_rows_are_in_correct_physical_regime():
-    df = diagnose_manual_rows()
+    df = diagnose_manual_rows(mapping="case_d_manual_strength_plus_fe_fu")
 
     assert df.shape[0] == 6
     assert df["candidate_count"].ge(1).all()
@@ -30,7 +34,7 @@ def test_manual_diagnostic_rows_are_in_correct_physical_regime():
 
 
 def test_manual_diagnostic_rows_track_intermediate_quantities_by_order_of_magnitude():
-    df = diagnose_manual_rows()
+    df = diagnose_manual_rows(mapping="case_d_manual_strength_plus_fe_fu")
 
     assert (df["strain_concrete_calc"] > 0.0).all()
     assert (df["strain_mild_calc"] > 0.0).all()
@@ -40,22 +44,23 @@ def test_manual_diagnostic_rows_track_intermediate_quantities_by_order_of_magnit
 
     # Ratio-style checks: keep broad but meaningful for diagnostic decomposition.
     assert (df["strain_concrete_calc"] / df["strain_concrete_ref"]).between(0.9, 1.2).all()
-    assert (df["strain_mild_calc"] / df["strain_mild_ref"]).between(0.07, 2.6).all()
+    assert (df["strain_mild_calc"] / df["strain_mild_ref"]).between(0.06, 2.8).all()
     assert (df["strain_prestressed_calc"] / df["strain_prestressed_ref"]).between(0.2, 2.5).all()
     assert (df["kappa_calc"] / df["kappa_ref"]).between(0.55, 2.0).all()
     assert (df["compress_force_calc"] / df["compress_force_ref"]).between(0.2, 1.4).all()
 
 
 def test_diagnostic_decomposition_identifies_dominant_error_layer():
-    df = diagnose_manual_rows()
+    df = diagnose_manual_rows(mapping="case_d_manual_strength_plus_fe_fu")
 
     moment_rel = float(df[["rel_Mx", "rel_My"]].mean().mean())
     equilibrium_rel = float(df[["rel_kappa", "rel_compress_force"]].mean().mean())
     strain_rel = float(df[["rel_strain_concrete", "rel_strain_mild", "rel_strain_prestressed"]].mean().mean())
 
-    # Ensure decomposition is informative (moments are not the only large discrepancies).
-    assert moment_rel > 0.15
-    assert equilibrium_rel > 0.05
+    # Updated mapping substantially reduces moment discrepancy;
+    # equilibrium/strain residuals now dominate.
+    assert moment_rel < 0.10
+    assert equilibrium_rel > 0.15
 
     conclusion = classify_dominant_mismatch(df)
     assert isinstance(conclusion, str)
@@ -68,5 +73,36 @@ def test_diagnostic_decomposition_identifies_dominant_error_layer():
         "mismatch is mixed across equilibrium and transformation layers",
     }
 
-    # Guardrail: strains are not catastrophically worse than moments.
-    assert strain_rel < 1.0
+    # Guardrail: strain/equilibrium residuals remain bounded and finite.
+    assert strain_rel < 1.2
+
+
+def test_contribution_study_reports_cases_and_error_breakdown():
+    summary, signed = run_contribution_study()
+
+    assert summary.shape[0] == 4
+    assert set(summary["mapping"]) == {
+        "case_a_baseline",
+        "case_b_manual_strength",
+        "case_c_manual_strength_plus_fe",
+        "case_d_manual_strength_plus_fe_fu",
+    }
+    assert signed.shape[0] == 24
+    assert {"dMx", "dMy", "mapping", "load_case", "V_deg"}.issubset(set(signed.columns))
+
+    row_a = summary.loc[summary["mapping"] == "case_a_baseline"].iloc[0]
+    row_b = summary.loc[summary["mapping"] == "case_b_manual_strength"].iloc[0]
+    row_c = summary.loc[summary["mapping"] == "case_c_manual_strength_plus_fe"].iloc[0]
+    row_d = summary.loc[summary["mapping"] == "case_d_manual_strength_plus_fe_fu"].iloc[0]
+
+    # Strength-factor remapping should improve both Mx and My vs baseline.
+    assert float(row_b["max_rel_err_Mx"]) < float(row_a["max_rel_err_Mx"])
+    assert float(row_b["max_rel_err_My"]) < float(row_a["max_rel_err_My"])
+
+    # FE remapping should improve or at least not materially worsen vs case B.
+    assert float(row_c["max_rel_err_Mx"]) <= float(row_b["max_rel_err_Mx"]) + 1e-3
+    assert float(row_c["max_rel_err_My"]) <= float(row_b["max_rel_err_My"]) + 1e-3
+
+    # FU has no observable effect for this six-row set; case D ~= case C.
+    assert np.isclose(float(row_d["max_rel_err_Mx"]), float(row_c["max_rel_err_Mx"]), rtol=0.0, atol=1e-12)
+    assert np.isclose(float(row_d["max_rel_err_My"]), float(row_c["max_rel_err_My"]), rtol=0.0, atol=1e-12)

@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from tests.pcross_benchmark_fixture import (
+    BENCHMARK_MAPPINGS,
     LOAD_CASE_3,
     LOAD_CASE_4,
     MANUAL_ROWS,
@@ -51,8 +52,8 @@ def _add_pair(row: dict, key: str, ref_val: float | None, calc_val: float | None
     row[f"rel_{key}"] = _safe_rel(d, ref_val)
 
 
-def diagnose_benchmark_row(load_case: int, angle_deg: float) -> dict:
-    solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
+def diagnose_benchmark_row(load_case: int, angle_deg: float, mapping: str | None = None) -> dict:
+    solver = build_pcross_tbeam_solver(prestress_eps0=0.004, mapping=mapping)
     p_target = _case_target(load_case)
 
     solved = solver.solve(float(angle_deg), p_target)
@@ -60,6 +61,7 @@ def diagnose_benchmark_row(load_case: int, angle_deg: float) -> dict:
     ref_diag = MANUAL_ROW_DIAGNOSTICS[(load_case, float(angle_deg))]
 
     out = {
+        "mapping": mapping or "default",
         "load_case": load_case,
         "P_target": p_target,
         "V_deg": float(angle_deg),
@@ -112,8 +114,8 @@ def _quadrant(mx: float, my: float) -> str:
     return "IV"
 
 
-def diagnose_manual_rows() -> pd.DataFrame:
-    rows = [diagnose_benchmark_row(lc, angle) for lc, angle in DIAGNOSTIC_ROWS]
+def diagnose_manual_rows(mapping: str | None = None) -> pd.DataFrame:
+    rows = [diagnose_benchmark_row(lc, angle, mapping=mapping) for lc, angle in DIAGNOSTIC_ROWS]
     return pd.DataFrame(rows).sort_values(["load_case", "V_deg"]).reset_index(drop=True)
 
 
@@ -129,6 +131,69 @@ def classify_dominant_mismatch(df: pd.DataFrame) -> str:
     if equilibrium_rel >= moment_rel or strain_rel >= moment_rel:
         return "largest mismatch appears already present in constitutive/equilibrium response"
     return "mismatch is mixed across equilibrium and transformation layers"
+
+
+def _grouped_discrepancy_summary(df: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "group": "force/strain/curvature level",
+                "mean_rel": float(
+                    df[
+                        [
+                            "rel_strain_concrete",
+                            "rel_strain_mild",
+                            "rel_strain_prestressed",
+                            "rel_kappa",
+                            "rel_compress_force",
+                        ]
+                    ].mean().mean()
+                ),
+            },
+            {
+                "group": "moment/transformation level",
+                "mean_rel": float(df[["rel_Mx", "rel_My", "rel_lever_L", "rel_lever_DX", "rel_lever_DY"]].mean().mean()),
+            },
+        ]
+    )
+
+
+def run_contribution_study() -> tuple[pd.DataFrame, pd.DataFrame]:
+    rows = []
+    signed = []
+    for name, mapping in BENCHMARK_MAPPINGS.items():
+        df = diagnose_manual_rows(mapping=name)
+        rows.append(
+            {
+                "mapping": name,
+                "gamma_c": mapping.gamma_c,
+                "gamma_s": mapping.gamma_s,
+                "gamma_p": mapping.gamma_p,
+                "gamma_E": mapping.gamma_E,
+                "gamma_u": mapping.gamma_u,
+                "max_rel_err_Mx": float(df["rel_Mx"].max()),
+                "max_rel_err_My": float(df["rel_My"].max()),
+                "mean_rel_force_strain_curvature": float(
+                    df[["rel_strain_concrete", "rel_strain_mild", "rel_strain_prestressed", "rel_kappa", "rel_compress_force"]]
+                    .mean()
+                    .mean()
+                ),
+                "mean_rel_moment_transform": float(df[["rel_Mx", "rel_My", "rel_lever_L", "rel_lever_DX", "rel_lever_DY"]].mean().mean()),
+                "dominant_mismatch": classify_dominant_mismatch(df),
+            }
+        )
+        for _, r in df.iterrows():
+            signed.append(
+                {
+                    "mapping": name,
+                    "load_case": int(r["load_case"]),
+                    "V_deg": float(r["V_deg"]),
+                    "dMx": float(r["dMx"]),
+                    "dMy": float(r["dMy"]),
+                }
+            )
+
+    return pd.DataFrame(rows), pd.DataFrame(signed)
 
 
 def diagnostics_markdown(df: pd.DataFrame) -> str:
@@ -159,6 +224,7 @@ def diagnostics_markdown(df: pd.DataFrame) -> str:
     ]
     sub = df[cols]
     conclusion = classify_dominant_mismatch(df)
+    grouped = _grouped_discrepancy_summary(df)
     md = "# Plastic Row Diagnostics\n\n"
     md += "Six embedded manual rows with signed and intermediate-quantity decomposition.\n\n"
     headers = list(sub.columns)
@@ -167,5 +233,11 @@ def diagnostics_markdown(df: pd.DataFrame) -> str:
     for _, r in sub.iterrows():
         vals = ["" if (isinstance(r[h], float) and not math.isfinite(r[h])) else str(r[h]) for h in headers]
         md += "| " + " | ".join(vals) + " |\n"
+
+    md += "\n## Grouped discrepancy summary\n\n"
+    md += "| group | mean_rel |\n| --- | --- |\n"
+    for _, r in grouped.iterrows():
+        md += f"| {r['group']} | {r['mean_rel']} |\n"
+
     md += "\nConclusion: " + conclusion + "\n"
     return md

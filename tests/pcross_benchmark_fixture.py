@@ -7,9 +7,10 @@ Manual input represented here:
 - LC3/LC4 angle sweeps
 
 Material mapping to this project's current EC2-oriented models:
-- manual concrete mapped as design value using gamma_c=1.50
-- manual mild steel mapped as design value using gamma_s=1.15
-- prestressing steel mapped with the same available EC2 partial factor path (gamma_s=1.15)
+- baseline post-PR32 mapping retained for contribution studies (gamma_c=1.50, gamma_s/p=1.15)
+- benchmark-manual design factors for LC3/LC4 are modeled with gamma_c=1.90, gamma_s=1.50, gamma_p=1.50
+- benchmark-only mappings can additionally apply gamma_E (steel modulus factor) and gamma_u
+  (rupture-limit factor) without changing app-wide defaults
 - manual prestress initial strain 0.40% -> per-bar eps0 = 0.004
 """
 
@@ -48,6 +49,38 @@ PRE_BAR_AREA = 1016.0
 PRE_BAR_POINTS = [(0.0, -0.38), (0.0, -0.54)]
 
 
+@dataclass(frozen=True)
+class BenchmarkMaterialMapping:
+    name: str
+    gamma_c: float
+    gamma_s: float
+    gamma_p: float
+    gamma_E: float = 1.0
+    gamma_u: float = 1.0
+
+
+BENCHMARK_MAPPINGS: dict[str, BenchmarkMaterialMapping] = {
+    # Case A: post-PR32 baseline retained for diagnostics.
+    "case_a_baseline": BenchmarkMaterialMapping(
+        name="case_a_baseline", gamma_c=1.50, gamma_s=1.15, gamma_p=1.15, gamma_E=1.0, gamma_u=1.0
+    ),
+    # Case B: manual benchmark strength factors (benchmark-only calibration; not app defaults).
+    "case_b_manual_strength": BenchmarkMaterialMapping(
+        name="case_b_manual_strength", gamma_c=1.90, gamma_s=1.50, gamma_p=1.50, gamma_E=1.0, gamma_u=1.0
+    ),
+    # Case C: manual strength + modulus partial factor FE.
+    "case_c_manual_strength_plus_fe": BenchmarkMaterialMapping(
+        name="case_c_manual_strength_plus_fe", gamma_c=1.90, gamma_s=1.50, gamma_p=1.50, gamma_E=1.50, gamma_u=1.0
+    ),
+    # Case D: manual strength + FE + FU benchmark mapping.
+    "case_d_manual_strength_plus_fe_fu": BenchmarkMaterialMapping(
+        name="case_d_manual_strength_plus_fe_fu", gamma_c=1.90, gamma_s=1.50, gamma_p=1.50, gamma_E=1.50, gamma_u=1.50
+    ),
+}
+
+DEFAULT_BENCHMARK_MAPPING = "case_d_manual_strength_plus_fe_fu"
+
+
 def _build_mild_bars():
     return [
         {"id": f"S{i+1}", "x": x, "y": y, "area": MILD_BAR_AREA}
@@ -62,7 +95,22 @@ def _build_prestress_bars(eps0: float):
     ]
 
 
-def build_pcross_tbeam_solver(prestress_eps0: float = 0.004) -> PlasticSolver:
+def resolve_benchmark_mapping(mapping: str | BenchmarkMaterialMapping | None) -> BenchmarkMaterialMapping:
+    if mapping is None:
+        return BENCHMARK_MAPPINGS[DEFAULT_BENCHMARK_MAPPING]
+    if isinstance(mapping, BenchmarkMaterialMapping):
+        return mapping
+    if mapping not in BENCHMARK_MAPPINGS:
+        raise ValueError(f"Unknown benchmark mapping '{mapping}'")
+    return BENCHMARK_MAPPINGS[mapping]
+
+
+def build_pcross_tbeam_solver(
+    prestress_eps0: float = 0.004,
+    mapping: str | BenchmarkMaterialMapping | None = None,
+) -> PlasticSolver:
+    benchmark_mapping = resolve_benchmark_mapping(mapping)
+
     cs = CrossSection(
         concrete_outline=CONCRETE_OUTLINE,
         concrete_voids=[],
@@ -72,19 +120,24 @@ def build_pcross_tbeam_solver(prestress_eps0: float = 0.004) -> PlasticSolver:
 
     return PlasticSolver(
         cross_section=cs,
-        # Mapping note: the manual benchmark was built with legacy PCROSS material
-        # families and safety-factorized design strengths. We map to this repository
-        # EC2 family using available partial factors (gamma_c=1.50, gamma_s/p=1.15).
-        # A separate gamma_u pathway is not represented in this model family, so any
-        # remaining gap should be interpreted as constitutive/methodology residual.
-        concrete=Concrete(f_ck=18.0, gamma_c=1.50),
-        mild_steel=MildSteel(f_yk=225.0, e_uk=0.20, gamma_s=1.15),
+        # Mapping note: these are benchmark-only factors used to map the embedded
+        # manual PCROSS rows. They are not recommendations for app-wide defaults.
+        concrete=Concrete(f_ck=18.0, gamma_c=benchmark_mapping.gamma_c),
+        mild_steel=MildSteel(
+            f_yk=225.0,
+            e_uk=0.20,
+            gamma_s=benchmark_mapping.gamma_s,
+            gamma_E=benchmark_mapping.gamma_E,
+            gamma_u=benchmark_mapping.gamma_u,
+        ),
         prestressed_steel=PrestressedSteel(
             f_p01k=1500.0,
             f_pk=1700.0,
             e_uk=0.035,
             E_p=195000.0,
-            gamma_s=1.15,
+            gamma_s=benchmark_mapping.gamma_p,
+            gamma_E=benchmark_mapping.gamma_E,
+            gamma_u=benchmark_mapping.gamma_u,
             initial_strain=0.0,
         ),
     )
