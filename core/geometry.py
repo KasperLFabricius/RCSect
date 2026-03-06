@@ -21,12 +21,18 @@ class CrossSection:
 
     def get_rotated_system(self, angle_v_deg: float):
         """
-        Returns a new snapshot of the geometry rotated by angle V (in degrees).
-        The rotation aligns the neutral axis perfectly horizontal with the X-axis.
+        Returns a new snapshot of the geometry rotated from global to solver-local axes.
+
+        Sign convention used in the plastic solver path:
+        - V is the angle between the neutral axis and global +Y axis.
+        - Positive V is counter-clockwise.
+        - Local +X' is aligned with the neutral axis and +Y' is normal to it.
+
+        The local system is built by rotating global coordinates by
+        phi = (V - 90 deg), so the neutral axis becomes y' = const.
         """
-        # Shapely rotates counter-clockwise by default. 
-        # PCROSS defines V as the angle from the Y-axis[cite: 618].
-        rotation_angle = -angle_v_deg 
+        # Shapely rotates counter-clockwise by default.
+        rotation_angle = self.local_rotation_deg(angle_v_deg)
         
         # Rotate concrete polygon around the origin (0,0)
         rotated_poly = rotate(self.base_concrete_poly, rotation_angle, origin=(0, 0))
@@ -38,6 +44,11 @@ class CrossSection:
         rotated_pre = self._rotate_bars(self.rebar_prestressed, rotation_angle)
         
         return rotated_poly, rotated_mild, rotated_pre
+
+    @staticmethod
+    def local_rotation_deg(angle_v_deg: float) -> float:
+        """Rotation angle (global -> local) used by the plastic solver."""
+        return float(angle_v_deg) - 90.0
 
     def _rotate_bars(self, bars: list, angle_deg: float) -> list:
         """Helper method to rotate a list of bar dictionaries."""

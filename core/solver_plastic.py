@@ -40,6 +40,11 @@ class PlasticSolver:
         """
         Main solver routine. Rotates the section, determines the failure pivot,
         finds the neutral axis depth y_na, and calculates ultimate moments Mx and My.
+
+        Axial-force convention:
+        - P_target is external design axial force N_Ed, compression-positive.
+        - N_calc is returned with the same compression-positive convention.
+        - Prestress is internal and enters through prestressing initial strain eps0.
         """
         self.poly_rot, self.rebar_mild_rot, self.rebar_pre_rot = self.cs.get_rotated_system(angle_v_deg)
 
@@ -58,46 +63,37 @@ class PlasticSolver:
         
         height = self.y_top - self.y_bottom
         attempted_pivots = []
-        y_na_solution = None
-        pivot_type = None
-        kappa = None
+        candidates = []
 
-        # Try concrete-controlled failure first unless it implies steel rupture.
+        # Evaluate concrete-controlled candidate.
         y_min_conc = self.y_bottom - 0.5 * height
         y_max_conc = self.y_top + 2.0 * height
-        bracket = self._find_bracket(P_target, 'concrete_controls', y_min_conc, y_max_conc)
-        if bracket is not None:
-            try:
-                candidate_y = brentq(self._equilibrium_target, bracket[0], bracket[1], args=(P_target, 'concrete_controls'))
-                candidate_kappa = self.concrete.eps_cu2 / (self.y_top - candidate_y)
-                eps_s_max = candidate_kappa * (candidate_y - self.y_steel_min)
-                if eps_s_max > self.mild_steel.eps_ud:
-                    attempted_pivots.append("concrete_controls: steel rupture")
-                else:
-                    y_na_solution = candidate_y
-                    kappa = candidate_kappa
-                    pivot_type = 'concrete_controls'
-            except ValueError:
-                attempted_pivots.append("concrete_controls: brentq failure")
+        conc_candidate = self._solve_pivot_candidate(
+            P_target=P_target,
+            pivot='concrete_controls',
+            y_min=y_min_conc,
+            y_max=y_max_conc,
+        )
+        if conc_candidate is not None:
+            candidates.append(conc_candidate)
         else:
-            attempted_pivots.append("concrete_controls: no bracket")
+            attempted_pivots.append("concrete_controls: no admissible root")
 
-        # Fall back to steel-controlled failure if needed.
-        if y_na_solution is None:
-            y_min_steel = self.y_steel_min + 1e-4 * height
-            y_max_steel = self.y_top + 2.0 * height
-            bracket = self._find_bracket(P_target, 'steel_controls', y_min_steel, y_max_steel)
-            if bracket is not None:
-                try:
-                    y_na_solution = brentq(self._equilibrium_target, bracket[0], bracket[1], args=(P_target, 'steel_controls'))
-                    pivot_type = 'steel_controls'
-                    kappa = self.mild_steel.eps_ud / (y_na_solution - self.y_steel_min)
-                except ValueError:
-                    attempted_pivots.append("steel_controls: brentq failure")
-            else:
-                attempted_pivots.append("steel_controls: no bracket")
+        # Evaluate steel-controlled candidate.
+        y_min_steel = self.y_steel_min + 1e-4 * height
+        y_max_steel = self.y_top + 2.0 * height
+        steel_candidate = self._solve_pivot_candidate(
+            P_target=P_target,
+            pivot='steel_controls',
+            y_min=y_min_steel,
+            y_max=y_max_steel,
+        )
+        if steel_candidate is not None:
+            candidates.append(steel_candidate)
+        else:
+            attempted_pivots.append("steel_controls: no admissible root")
 
-        if y_na_solution is None:
+        if not candidates:
             raise RuntimeError(
                 "Plastic solver failed to bracket neutral axis for "
                 f"P_target={P_target}, angle V={angle_v_deg} deg. "
@@ -105,19 +101,25 @@ class PlasticSolver:
                 f"Attempts: {', '.join(attempted_pivots) if attempted_pivots else 'none'}"
             )
 
+        best = min(candidates, key=lambda c: c['residual_abs'])
+        y_na_solution = best['y_na']
+        kappa = best['kappa']
+        pivot_type = best['pivot']
+
         forces_data = self._calculate_detailed_internal_forces(y_na_solution, kappa)
         
         # 1. Coordinate Transformations
-        angle_rad = np.radians(angle_v_deg)
+        angle_rad = np.radians(self.cs.local_rotation_deg(angle_v_deg))
         cos_a = np.cos(angle_rad)
         sin_a = np.sin(angle_rad)
-        
-        Mx_global = forces_data['Mx_rot'] * cos_a + forces_data['My_rot'] * sin_a
-        My_global = -forces_data['Mx_rot'] * sin_a + forces_data['My_rot'] * cos_a
+
+        # Transform local moments (x', y') back to global (x, y): R(phi).
+        Mx_global = forces_data['Mx_rot'] * cos_a - forces_data['My_rot'] * sin_a
+        My_global = forces_data['Mx_rot'] * sin_a + forces_data['My_rot'] * cos_a
         
         # [cite_start]2. Neutral Axis Intersections [cite: 760]
         intersection_y = y_na_solution / cos_a if abs(cos_a) > 1e-6 else float('inf')
-        intersection_x = -y_na_solution / sin_a if abs(sin_a) > 1e-6 else float('inf')
+        intersection_x = y_na_solution / sin_a if abs(sin_a) > 1e-6 else float('inf')
 
         # [cite_start]3. Maximum Strains [cite: 761]
         max_concrete_strain = kappa * (self.y_top - y_na_solution) * 1000.0 # per mille
@@ -145,8 +147,8 @@ class PlasticSolver:
         DX_rot = c_comp['x'] - c_tens['x'] if c_tens['x'] is not None else 0.0
         DY_rot = c_comp['y'] - c_tens['y'] if c_tens['y'] is not None else 0.0
         
-        DX_global = DX_rot * cos_a + DY_rot * sin_a
-        DY_global = -DX_rot * sin_a + DY_rot * cos_a
+        DX_global = DX_rot * cos_a - DY_rot * sin_a
+        DY_global = DX_rot * sin_a + DY_rot * cos_a
         L = np.sqrt(DX_global**2 + DY_global**2)
         
         # [cite_start]5. Safety Warnings [cite: 766, 767]
@@ -160,7 +162,7 @@ class PlasticSolver:
             "y_na": y_na_solution,
             "kappa": kappa,
             "pivot": pivot_type,
-            "N_calc": -forces_data['N_tot'],
+            "N_calc": self._to_compression_positive(forces_data['N_tot']),
             "Mx": Mx_global,
             "My": My_global,
             "na_intersect_x": intersection_x,
@@ -185,8 +187,49 @@ class PlasticSolver:
             kappa = self.mild_steel.eps_ud / (y_na - self.y_steel_min)
             
         forces = self._calculate_detailed_internal_forces(y_na, kappa)
-        N_comp = -forces['N_tot']
-        return N_comp - P_target
+        N_internal = self._to_compression_positive(forces['N_tot'])
+        return N_internal - P_target
+
+    @staticmethod
+    def _to_compression_positive(N_internal_signed: float) -> float:
+        """
+        Convert solver internal resultant to compression-positive convention.
+
+        Internal accumulation uses force sign from material stress:
+        tension positive, compression negative. This helper converts to the
+        external N_Ed convention where compression is positive.
+        """
+        return -N_internal_signed
+
+    def _solve_pivot_candidate(self, P_target: float, pivot: str, y_min: float, y_max: float):
+        bracket = self._find_bracket(P_target, pivot, y_min, y_max)
+        if bracket is None:
+            return None
+
+        try:
+            y_na = brentq(self._equilibrium_target, bracket[0], bracket[1], args=(P_target, pivot))
+        except ValueError:
+            return None
+
+        if pivot == 'concrete_controls':
+            if abs(self.y_top - y_na) < 1e-12:
+                return None
+            kappa = self.concrete.eps_cu2 / (self.y_top - y_na)
+            eps_s_max = kappa * (y_na - self.y_steel_min)
+            if eps_s_max > self.mild_steel.eps_ud:
+                return None
+        else:
+            if abs(y_na - self.y_steel_min) < 1e-12:
+                return None
+            kappa = self.mild_steel.eps_ud / (y_na - self.y_steel_min)
+
+        residual = self._equilibrium_target(y_na, P_target, pivot)
+        return {
+            'pivot': pivot,
+            'y_na': y_na,
+            'kappa': kappa,
+            'residual_abs': abs(residual),
+        }
 
     def _find_bracket(self, P_target, pivot, y_min, y_max, n=80):
         y_values = np.linspace(y_min, y_max, n)
