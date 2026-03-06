@@ -84,6 +84,37 @@ def integrate_concrete_zone(geom, eps0, kx, ky, Ec_eff_kN_m2):
     return N_c, Mx_c, My_c, max_sigma_c
 
 
+def _max_concrete_stress_on_boundary(concrete_polygon, eps0, kx, ky, Ec_eff_kN_m2):
+    """Return max concrete compression from solved strain at boundary vertices."""
+    if concrete_polygon is None or concrete_polygon.is_empty:
+        return 0.0
+
+    boundary_points = set()
+
+    def collect_ring(ring):
+        for x, y in list(ring.coords)[:-1]:
+            boundary_points.add((float(x), float(y)))
+
+    if isinstance(concrete_polygon, Polygon):
+        collect_ring(concrete_polygon.exterior)
+        for interior in concrete_polygon.interiors:
+            collect_ring(interior)
+    elif isinstance(concrete_polygon, MultiPolygon):
+        for poly in concrete_polygon.geoms:
+            collect_ring(poly.exterior)
+            for interior in poly.interiors:
+                collect_ring(interior)
+    else:
+        return 0.0
+
+    max_sigma = 0.0
+    for x, y in boundary_points:
+        eps = eps0 + kx * y + ky * x
+        sigma_c = Ec_eff_kN_m2 * eps if eps > 0.0 else 0.0
+        max_sigma = max(max_sigma, sigma_c)
+    return max_sigma
+
+
 class ElasticSolver:
     def __init__(self, cross_section, E_c: float, E_s: float):
         self.cs = cross_section
@@ -136,11 +167,15 @@ class ElasticSolver:
                 "eps0": float(res_long["eps0"]),
                 "kx": float(res_long["kx"]),
                 "ky": float(res_long["ky"]),
+                "x_intercept": float(res_long["na_intersect_x"]),
+                "y_intercept": float(res_long["na_intersect_y"]),
             },
             "na_RST1": {
                 "eps0": float(res_comb["eps0"]),
                 "kx": float(res_comb["kx"]),
                 "ky": float(res_comb["ky"]),
+                "x_intercept": float(res_comb["na_intersect_x"]),
+                "y_intercept": float(res_comb["na_intersect_y"]),
             },
         }
 
@@ -307,8 +342,11 @@ class ElasticSolver:
 
         def section_response(eps0, kx, ky):
             compression_zone = self._compression_zone(eps0, kx, ky)
-            N_c, Mx_c, My_c, max_sigma_c = integrate_concrete_zone(
+            N_c, Mx_c, My_c, max_sigma_c_qp = integrate_concrete_zone(
                 compression_zone, eps0, kx, ky, Ec_eff_kN_m2
+            )
+            max_sigma_c_boundary = _max_concrete_stress_on_boundary(
+                self.cs.base_concrete_poly, eps0, kx, ky, Ec_eff_kN_m2
             )
 
             N_s = 0.0
@@ -335,7 +373,8 @@ class ElasticSolver:
                 "Mx": Mx_c + Mx_s,
                 "My": My_c + My_s,
                 "steel_stresses": steel_stresses,
-                "max_concrete_compression": max_sigma_c,
+                "max_concrete_compression": max_sigma_c_boundary,
+                "max_concrete_compression_qp": max_sigma_c_qp,
             }
 
         def residual(u):
@@ -370,6 +409,7 @@ class ElasticSolver:
         return {
             "steel_stresses": resp["steel_stresses"],
             "max_concrete_compression": resp["max_concrete_compression"],
+            "max_concrete_compression_qp": resp["max_concrete_compression_qp"],
             "na_intersect_x": x_int,
             "na_intersect_y": y_int,
             "eps0": eps0,
