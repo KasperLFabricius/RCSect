@@ -7,8 +7,9 @@ Manual input represented here:
 - LC3/LC4 angle sweeps
 
 Material mapping to this project's current EC2-oriented models:
-- manual concrete fck=18 MPa -> Concrete(f_ck=18, gamma_c=1.0)
-- manual mild steel fyk=225 MPa and elongation=20% -> MildSteel(f_yk=225, e_uk=0.20, gamma_s=1.0)
+- manual concrete mapped as design value using gamma_c=1.50
+- manual mild steel mapped as design value using gamma_s=1.15
+- prestressing steel mapped with the same available EC2 partial factor path (gamma_s=1.15)
 - manual prestress initial strain 0.40% -> per-bar eps0 = 0.004
 """
 
@@ -72,17 +73,18 @@ def build_pcross_tbeam_solver(prestress_eps0: float = 0.004) -> PlasticSolver:
     return PlasticSolver(
         cross_section=cs,
         # Mapping note: the manual benchmark was built with legacy PCROSS material
-        # families; here we intentionally map to the current EC2-oriented RCSect
-        # families at gamma=1.0 to preserve nominal strengths while accepting that
-        # stress-block/ductility-shape differences may remain.
-        concrete=Concrete(f_ck=18.0, gamma_c=1.0),
-        mild_steel=MildSteel(f_yk=225.0, e_uk=0.20, gamma_s=1.0),
+        # families and safety-factorized design strengths. We map to this repository
+        # EC2 family using available partial factors (gamma_c=1.50, gamma_s/p=1.15).
+        # A separate gamma_u pathway is not represented in this model family, so any
+        # remaining gap should be interpreted as constitutive/methodology residual.
+        concrete=Concrete(f_ck=18.0, gamma_c=1.50),
+        mild_steel=MildSteel(f_yk=225.0, e_uk=0.20, gamma_s=1.15),
         prestressed_steel=PrestressedSteel(
             f_p01k=1500.0,
             f_pk=1700.0,
             e_uk=0.035,
             E_p=195000.0,
-            gamma_s=1.0,
+            gamma_s=1.15,
             initial_strain=0.0,
         ),
     )

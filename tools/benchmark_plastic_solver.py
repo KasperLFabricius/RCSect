@@ -23,6 +23,42 @@ def _markdown_table(df):
     return "\n".join(lines)
 
 
+
+
+def _prior_summary_if_available(summary_csv: Path):
+    """Load prior committed summary (HEAD) when available, else working-tree file."""
+    try:
+        import io
+        import subprocess
+        import pandas as pd
+
+        rel = summary_csv.as_posix()
+        proc = subprocess.run(
+            ["git", "show", f"HEAD:{rel}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return pd.read_csv(io.StringIO(proc.stdout))
+    except Exception:
+        pass
+
+    if not summary_csv.exists():
+        return None
+    try:
+        import pandas as pd
+
+        return pd.read_csv(summary_csv)
+    except Exception:
+        return None
+
+
+def _max_rel_errors(df):
+    if df is None or df.empty:
+        return (None, None)
+    return (float(df["max_rel_err_Mx"].max()), float(df["max_rel_err_My"].max()))
+
 def main() -> None:
     out_dir = Path("artifacts") / "benchmark"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -32,13 +68,15 @@ def main() -> None:
         BenchmarkSweepSpec(load_case=3, p_target=LOAD_CASE_3.P_target, angles_deg=LOAD_CASE_3.angles_deg),
         BenchmarkSweepSpec(load_case=4, p_target=LOAD_CASE_4.P_target, angles_deg=LOAD_CASE_4.angles_deg),
     ]
+    summary_csv = out_dir / "plastic_benchmark_summary.csv"
+    prior_summary = _prior_summary_if_available(summary_csv)
+
     detail = run_benchmark_sweeps(solver, specs)
     summary = summarize_benchmark(detail)
     row_diag = diagnose_manual_rows()
     conclusion = classify_dominant_mismatch(row_diag)
 
     detail_csv = out_dir / "plastic_benchmark_detail.csv"
-    summary_csv = out_dir / "plastic_benchmark_summary.csv"
     summary_md = out_dir / "plastic_benchmark_summary.md"
     row_diag_csv = out_dir / "plastic_row_diagnostics.csv"
     row_diag_md = out_dir / "plastic_row_diagnostics.md"
@@ -77,6 +115,19 @@ def main() -> None:
     md += "Magnitude-only errors remain in CSV as secondary diagnostics.\n\n"
     md += _markdown_table(referenced)
     md += "\n\nConclusion: " + conclusion + "\n"
+
+    prior_mx, prior_my = _max_rel_errors(prior_summary)
+    cur_mx, cur_my = _max_rel_errors(summary)
+    md += "\n## Error delta vs prior artifact\n\n"
+    if prior_mx is None or prior_my is None:
+        md += "No prior summary artifact was readable; deltas unavailable.\n"
+    else:
+        md += f"- prior max_rel_err_Mx: {prior_mx:.6f}\n"
+        md += f"- current max_rel_err_Mx: {cur_mx:.6f}\n"
+        md += f"- delta max_rel_err_Mx: {cur_mx - prior_mx:+.6f}\n"
+        md += f"- prior max_rel_err_My: {prior_my:.6f}\n"
+        md += f"- current max_rel_err_My: {cur_my:.6f}\n"
+        md += f"- delta max_rel_err_My: {cur_my - prior_my:+.6f}\n"
     summary_md.write_text(md, encoding="utf-8")
     row_diag_md.write_text(diagnostics_markdown(row_diag), encoding="utf-8")
 

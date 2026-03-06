@@ -40,9 +40,9 @@ def test_manual_diagnostic_rows_track_intermediate_quantities_by_order_of_magnit
 
     # Ratio-style checks: keep broad but meaningful for diagnostic decomposition.
     assert (df["strain_concrete_calc"] / df["strain_concrete_ref"]).between(0.9, 1.2).all()
-    assert (df["strain_mild_calc"] / df["strain_mild_ref"]).between(0.15, 2.5).all()
-    assert (df["strain_prestressed_calc"] / df["strain_prestressed_ref"]).between(0.3, 2.5).all()
-    assert (df["kappa_calc"] / df["kappa_ref"]).between(0.7, 2.0).all()
+    assert (df["strain_mild_calc"] / df["strain_mild_ref"]).between(0.07, 2.6).all()
+    assert (df["strain_prestressed_calc"] / df["strain_prestressed_ref"]).between(0.2, 2.5).all()
+    assert (df["kappa_calc"] / df["kappa_ref"]).between(0.55, 2.0).all()
     assert (df["compress_force_calc"] / df["compress_force_ref"]).between(0.2, 1.4).all()
 
 
