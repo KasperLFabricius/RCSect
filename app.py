@@ -34,6 +34,11 @@ def _build_plastic_angle_values(v_min: float, v_max: float, v_inc: float):
 
 def _run_plastic_sweep(plastic_engine: PlasticSolver, angle_values_deg, target_p: float):
     rows = plastic_engine.solve_angle_sweep(angle_values_deg=angle_values_deg, P_target=target_p)
+    if len(rows) != len(angle_values_deg):
+        raise ValueError(
+            "Plastic sweep solver returned an unexpected number of rows: "
+            f"expected {len(angle_values_deg)}, got {len(rows)}"
+        )
     out = []
     for angle, row in zip(angle_values_deg, rows):
         item = dict(row)
