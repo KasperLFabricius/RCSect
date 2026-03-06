@@ -90,7 +90,19 @@ def test_contribution_study_reports_cases_and_error_breakdown():
     assert signed.shape[0] == 24
     assert {"dMx", "dMy", "mapping", "load_case", "V_deg"}.issubset(set(signed.columns))
 
-    # Strength-factor remapping should be the dominant shift vs baseline.
-    a = float(summary.loc[summary["mapping"] == "case_a_baseline", "max_rel_err_Mx"].iloc[0])
-    b = float(summary.loc[summary["mapping"] == "case_b_manual_strength", "max_rel_err_Mx"].iloc[0])
-    assert b < a
+    row_a = summary.loc[summary["mapping"] == "case_a_baseline"].iloc[0]
+    row_b = summary.loc[summary["mapping"] == "case_b_manual_strength"].iloc[0]
+    row_c = summary.loc[summary["mapping"] == "case_c_manual_strength_plus_fe"].iloc[0]
+    row_d = summary.loc[summary["mapping"] == "case_d_manual_strength_plus_fe_fu"].iloc[0]
+
+    # Strength-factor remapping should improve both Mx and My vs baseline.
+    assert float(row_b["max_rel_err_Mx"]) < float(row_a["max_rel_err_Mx"])
+    assert float(row_b["max_rel_err_My"]) < float(row_a["max_rel_err_My"])
+
+    # FE remapping should improve or at least not materially worsen vs case B.
+    assert float(row_c["max_rel_err_Mx"]) <= float(row_b["max_rel_err_Mx"]) + 1e-3
+    assert float(row_c["max_rel_err_My"]) <= float(row_b["max_rel_err_My"]) + 1e-3
+
+    # FU has no observable effect for this six-row set; case D ~= case C.
+    assert np.isclose(float(row_d["max_rel_err_Mx"]), float(row_c["max_rel_err_Mx"]), rtol=0.0, atol=1e-12)
+    assert np.isclose(float(row_d["max_rel_err_My"]), float(row_c["max_rel_err_My"]), rtol=0.0, atol=1e-12)

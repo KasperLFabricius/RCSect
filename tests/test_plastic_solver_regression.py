@@ -91,14 +91,18 @@ def test_benchmark_reference_rows_match_with_explicit_error_tolerances():
     assert refs["sign_agreement_My"].all()
     assert refs["quadrant_agreement"].all()
 
-    # Tightened signed-error tolerances vs previous loose plausibility gates.
-    assert refs["rel_err_Mx"].max() <= 0.46
-    assert refs["rel_err_My"].max() <= 0.33
+    # Keep guards close to the current branch achieved benchmark performance,
+    # while allowing limited numerical headroom.
+    assert refs["rel_err_Mx"].max() <= 0.10
+    assert refs["rel_err_My"].max() <= 0.06
 
-    # LC4 now governs Mx residual; keep a dedicated cap to catch regressions.
+    lc3_refs = refs[refs["load_case"] == 3]
     lc4_refs = refs[refs["load_case"] == 4]
-    assert lc4_refs["rel_err_Mx"].max() <= 0.46
-    assert lc4_refs["rel_err_My"].max() <= 0.33
+
+    assert lc3_refs["rel_err_Mx"].max() <= 0.07
+    assert lc3_refs["rel_err_My"].max() <= 0.03
+    assert lc4_refs["rel_err_Mx"].max() <= 0.08
+    assert lc4_refs["rel_err_My"].max() <= 0.04
 
 
 def test_sweep_has_branch_continuity_and_no_obvious_branch_flips():
