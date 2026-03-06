@@ -21,6 +21,31 @@ from core.solver_plastic import PlasticSolver
 from utils.units import gpa_to_mpa
 
 
+def _build_plastic_angle_values(v_min: float, v_max: float, v_inc: float):
+    values = []
+    current_v = float(v_min)
+    v_max_f = float(v_max)
+    step = float(v_inc)
+    while current_v <= v_max_f + 1e-12:
+        values.append(current_v)
+        current_v += step
+    return values
+
+
+def _run_plastic_sweep(plastic_engine: PlasticSolver, angle_values_deg, target_p: float):
+    rows = plastic_engine.solve_angle_sweep(angle_values_deg=angle_values_deg, P_target=target_p)
+    if len(rows) != len(angle_values_deg):
+        raise ValueError(
+            "Plastic sweep solver returned an unexpected number of rows: "
+            f"expected {len(angle_values_deg)}, got {len(rows)}"
+        )
+    out = []
+    for angle, row in zip(angle_values_deg, rows):
+        item = dict(row)
+        item["V"] = float(item.get("V", angle))
+        out.append(item)
+    return out
+
 
 def build_computational_models(data):
     settings = data.get("analysis_settings", {})
@@ -130,13 +155,12 @@ def _compute_results(data: dict):
                 continue
 
             try:
-                plastic_sweep_results = []
-                current_v = v_min
-                while current_v <= v_max:
-                    res = plastic_engine.solve(angle_v_deg=current_v, P_target=target_p)
-                    res["V"] = current_v
-                    plastic_sweep_results.append(res)
-                    current_v += v_inc
+                angle_values = _build_plastic_angle_values(v_min=v_min, v_max=v_max, v_inc=v_inc)
+                plastic_sweep_results = _run_plastic_sweep(
+                    plastic_engine=plastic_engine,
+                    angle_values_deg=angle_values,
+                    target_p=target_p,
+                )
                 computed["plastic"].append({"case": case, "case_name": case_name, "result": plastic_sweep_results, "target_P": target_p})
             except Exception as exc:
                 computed["plastic"].append({"case": case, "case_name": case_name, "error": str(exc)})
@@ -157,7 +181,7 @@ def _input_hash(data: dict) -> str:
 
 
 def main():
-    st.set_page_config(page_title="RCSect", page_icon="🏗", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title="RCSect", page_icon="\U0001F3D7", layout="wide", initial_sidebar_state="expanded")
     st.title("RCSect: Reinforced Concrete Section Analysis")
 
     initialize_session_state()
