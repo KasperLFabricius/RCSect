@@ -14,10 +14,12 @@ from tests.pcross_benchmark_fixture import (
     build_pcross_tbeam_solver,
 )
 from tests.plastic_diagnostics import (
+    choose_semantic_winners,
     classify_dominant_mismatch,
     diagnose_manual_rows,
     diagnostics_markdown,
     run_contribution_study,
+    run_output_semantics_study,
     run_type6_prestress_mapping_study,
 )
 
@@ -131,6 +133,29 @@ def _output_group_summary(detail):
     import pandas as pd
     return pd.DataFrame(rows).sort_values(["fixture_family", "output_group"]).reset_index(drop=True)
 
+
+
+def _semantic_gap_table(before_detail, after_detail):
+    import pandas as pd
+
+    rows = []
+    groups = {
+        "moments": ["rel_err_Mx", "rel_err_My"],
+        "strains": ["rel_err_strain_concrete", "rel_err_strain_mild", "rel_err_strain_prestressed"],
+        "compression force": ["rel_err_compress_force"],
+        "lever-arms": ["rel_err_L", "rel_err_DX", "rel_err_DY"],
+    }
+    for name, cols in groups.items():
+        b = _max_rel(before_detail[before_detail["Mx_ref"].notna()], cols)
+        a = _max_rel(after_detail[after_detail["Mx_ref"].notna()], cols)
+        rows.append({
+            "group": name,
+            "max_rel_before": b,
+            "max_rel_after": a,
+            "delta": (a - b) if b is not None and a is not None else None,
+        })
+    return pd.DataFrame(rows)
+
 def main() -> None:
     out_dir = Path("artifacts") / "benchmark"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -157,11 +182,28 @@ def main() -> None:
 
     import pandas as pd
     detail = pd.concat(detail_frames, ignore_index=True)
+
+    aligned_frames = [run_benchmark_sweeps(solver, specs, semantic_profile="semantic_aligned")]
+    for key in ["snit_a", "snit_b", "snit_c", "snit_d", "section0", "sectioniv"]:
+        case = EMBEDDED_BENCHMARK_CASES[key]
+        aligned_frames.append(
+            run_benchmark_sweeps(
+                case.solver_builder(),
+                [BenchmarkSweepSpec(load_case=case.load_case, p_target=case.load.P_target, angles_deg=case.load.angles_deg)],
+                reference_rows=case.reference_rows,
+                semantic_profile="semantic_aligned",
+            )
+        )
+    detail_aligned = pd.concat(aligned_frames, ignore_index=True)
+
     summary = summarize_benchmark(detail)
     row_diag = diagnose_manual_rows(mapping=DEFAULT_BENCHMARK_MAPPING)
     contribution_summary, contribution_signed = run_contribution_study()
     type6_study = run_type6_prestress_mapping_study()
-    grouped_readiness = _output_group_summary(detail)
+    semantics_detail, semantics_summary = run_output_semantics_study()
+    semantic_winners = choose_semantic_winners(semantics_summary)
+    grouped_readiness = _output_group_summary(detail_aligned)
+    semantic_gap = _semantic_gap_table(detail, detail_aligned)
     conclusion = classify_dominant_mismatch(row_diag)
 
     detail_csv = out_dir / "plastic_benchmark_detail.csv"
@@ -172,6 +214,8 @@ def main() -> None:
     contribution_signed_csv = out_dir / "plastic_benchmark_contribution_signed_errors.csv"
     type6_study_csv = out_dir / "plastic_type6_mapping_study.csv"
     grouped_readiness_csv = out_dir / "plastic_sub1_readiness.csv"
+    semantics_detail_csv = out_dir / "plastic_output_semantics_study.csv"
+    semantics_summary_md = out_dir / "plastic_output_semantics_summary.md"
 
     detail.to_csv(detail_csv, index=False)
     summary.to_csv(summary_csv, index=False)
@@ -180,6 +224,7 @@ def main() -> None:
     contribution_signed.to_csv(contribution_signed_csv, index=False)
     type6_study.to_csv(type6_study_csv, index=False)
     grouped_readiness.to_csv(grouped_readiness_csv, index=False)
+    semantics_detail.to_csv(semantics_detail_csv, index=False)
 
     referenced = detail[detail["Mx_ref"].notna()][
         [
@@ -223,7 +268,13 @@ def main() -> None:
     md += _markdown_table(contribution_summary)
     md += "\n\n## Type-6 prestress mapping study (Snit A-D, benchmark-only)\n\n"
     md += _markdown_table(type6_study)
-    md += "\n\n## Sub-1% readiness by fixture family and output group\n\n"
+    md += "\n\n## Output-semantics candidates and winners\n\n"
+    md += "Chosen winners (majority across fixture families):\n\n"
+    for k, v in semantic_winners.items():
+        md += f"- {k}: `{v}`\n"
+    md += "\n\n## Semantic gap (before vs semantic-aligned benchmark comparison)\n\n"
+    md += _markdown_table(semantic_gap)
+    md += "\n\n## Sub-1% readiness by fixture family and output group (after semantic alignment)\n\n"
     md += _markdown_table(grouped_readiness)
     md += "\n\nConclusion: " + conclusion + "\n"
 
@@ -243,6 +294,17 @@ def main() -> None:
     summary_md.write_text(md, encoding="utf-8")
     row_diag_md.write_text(diagnostics_markdown(row_diag), encoding="utf-8")
 
+    sem_md = "# Plastic output semantics study\n\n"
+    sem_md += "## Candidate metrics by fixture family\n\n"
+    sem_md += _markdown_table(semantics_summary)
+    sem_md += "\n\n## Chosen winners\n\n"
+    if semantic_winners:
+        for k, v in semantic_winners.items():
+            sem_md += f"- {k}: `{v}`\n"
+    else:
+        sem_md += "No consistent winner across families.\n"
+    semantics_summary_md.write_text(sem_md, encoding="utf-8")
+
     print(f"Wrote {detail_csv}")
     print(f"Wrote {summary_csv}")
     print(f"Wrote {summary_md}")
@@ -252,6 +314,8 @@ def main() -> None:
     print(f"Wrote {contribution_signed_csv}")
     print(f"Wrote {type6_study_csv}")
     print(f"Wrote {grouped_readiness_csv}")
+    print(f"Wrote {semantics_detail_csv}")
+    print(f"Wrote {semantics_summary_md}")
 
 
 if __name__ == "__main__":
