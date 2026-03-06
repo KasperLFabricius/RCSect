@@ -9,6 +9,8 @@ import pandas as pd
 
 from tests.pcross_benchmark_fixture import MANUAL_ROWS
 
+TINY_REF = 1e-12
+
 
 @dataclass(frozen=True)
 class BenchmarkSweepSpec:
@@ -37,6 +39,12 @@ def _trend_sign(values: list[float]) -> list[int]:
     return out
 
 
+def _safe_sign_agreement(calc: float, ref: float | None) -> bool | float:
+    if ref is None or not np.isfinite(ref):
+        return np.nan
+    return bool(np.sign(calc) == np.sign(ref))
+
+
 def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec]) -> pd.DataFrame:
     """Run solver sweeps and return one normalized DataFrame row per angle."""
     rows: list[dict] = []
@@ -50,8 +58,15 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec]) -> pd.Da
             ref = MANUAL_ROWS.get((spec.load_case, a), None)
             ref_mx = float(ref["Mx"]) if ref else np.nan
             ref_my = float(ref["My"]) if ref else np.nan
-            calc_abs_mx = abs(float(row["Mx"]))
-            calc_abs_my = abs(float(row["My"]))
+            calc_mx = float(row["Mx"])
+            calc_my = float(row["My"])
+            calc_abs_mx = abs(calc_mx)
+            calc_abs_my = abs(calc_my)
+            ref_abs_mx = abs(ref_mx) if ref else np.nan
+            ref_abs_my = abs(ref_my) if ref else np.nan
+
+            quadrant_calc = _quadrant(calc_mx, calc_my)
+            quadrant_expected = _quadrant(ref_mx, ref_my) if ref else np.nan
 
             rows.append(
                 {
@@ -60,15 +75,17 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec]) -> pd.Da
                     "V_deg": a,
                     "Mx_ref": ref_mx,
                     "My_ref": ref_my,
-                    "Mx_calc": float(row["Mx"]),
-                    "My_calc": float(row["My"]),
+                    "Mx_calc": calc_mx,
+                    "My_calc": calc_my,
                     "Mx_calc_abs": calc_abs_mx,
                     "My_calc_abs": calc_abs_my,
-                    "sign_agreement_Mx": (np.sign(row["Mx"]) == -1),
-                    "sign_agreement_My": (np.sign(row["My"]) == 1),
-                    "quadrant_calc": _quadrant(float(row["Mx"]), float(row["My"])),
-                    "quadrant_expected": "II",
-                    "quadrant_agreement": _quadrant(float(row["Mx"]), float(row["My"])) == "II",
+                    "Mx_ref_abs": ref_abs_mx,
+                    "My_ref_abs": ref_abs_my,
+                    "sign_agreement_Mx": _safe_sign_agreement(calc_mx, ref_mx),
+                    "sign_agreement_My": _safe_sign_agreement(calc_my, ref_my),
+                    "quadrant_calc": quadrant_calc,
+                    "quadrant_expected": quadrant_expected,
+                    "quadrant_agreement": (quadrant_calc == quadrant_expected) if ref else np.nan,
                     "candidate_count": int(row.get("candidate_count", 1)),
                     "selected_candidate_index": row.get("selected_candidate_index"),
                     "pivot": row.get("pivot"),
@@ -80,17 +97,25 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec]) -> pd.Da
     df = pd.DataFrame(rows).sort_values(["load_case", "V_deg"]).reset_index(drop=True)
 
     has_ref = df["Mx_ref"].notna() & df["My_ref"].notna()
-    df["abs_err_Mx"] = np.where(has_ref, np.abs(df["Mx_calc_abs"] - df["Mx_ref"]), np.nan)
-    df["abs_err_My"] = np.where(has_ref, np.abs(df["My_calc_abs"] - df["My_ref"]), np.nan)
-    df["rel_err_Mx"] = np.where(has_ref, df["abs_err_Mx"] / df["Mx_ref"], np.nan)
-    df["rel_err_My"] = np.where(has_ref, df["abs_err_My"] / df["My_ref"], np.nan)
+    df["abs_err_Mx"] = np.where(has_ref, np.abs(df["Mx_calc"] - df["Mx_ref"]), np.nan)
+    df["abs_err_My"] = np.where(has_ref, np.abs(df["My_calc"] - df["My_ref"]), np.nan)
+    df["rel_err_Mx"] = np.where(has_ref, df["abs_err_Mx"] / np.maximum(np.abs(df["Mx_ref"]), TINY_REF), np.nan)
+    df["rel_err_My"] = np.where(has_ref, df["abs_err_My"] / np.maximum(np.abs(df["My_ref"]), TINY_REF), np.nan)
+
+    # Secondary diagnostic-only magnitude errors.
+    df["abs_mag_err_Mx"] = np.where(has_ref, np.abs(df["Mx_calc_abs"] - df["Mx_ref_abs"]), np.nan)
+    df["abs_mag_err_My"] = np.where(has_ref, np.abs(df["My_calc_abs"] - df["My_ref_abs"]), np.nan)
 
     for lc in sorted(df["load_case"].unique()):
         mask = df["load_case"] == lc
-        mx_trend = _trend_sign(df.loc[mask, "Mx_calc_abs"].tolist())
-        my_trend = _trend_sign(df.loc[mask, "My_calc_abs"].tolist())
-        df.loc[mask, "trend_sign_Mx_abs"] = [np.nan] + mx_trend
-        df.loc[mask, "trend_sign_My_abs"] = [np.nan] + my_trend
+        mx_trend = _trend_sign(df.loc[mask, "Mx_calc"].tolist())
+        my_trend = _trend_sign(df.loc[mask, "My_calc"].tolist())
+        mx_abs_trend = _trend_sign(df.loc[mask, "Mx_calc_abs"].tolist())
+        my_abs_trend = _trend_sign(df.loc[mask, "My_calc_abs"].tolist())
+        df.loc[mask, "trend_sign_Mx"] = [np.nan] + mx_trend
+        df.loc[mask, "trend_sign_My"] = [np.nan] + my_trend
+        df.loc[mask, "trend_sign_Mx_abs"] = [np.nan] + mx_abs_trend
+        df.loc[mask, "trend_sign_My_abs"] = [np.nan] + my_abs_trend
 
     return df
 
@@ -109,9 +134,9 @@ def summarize_benchmark(df: pd.DataFrame) -> pd.DataFrame:
                 "max_abs_err_My": float(with_ref["abs_err_My"].max()) if not with_ref.empty else np.nan,
                 "max_rel_err_Mx": float(with_ref["rel_err_Mx"].max()) if not with_ref.empty else np.nan,
                 "max_rel_err_My": float(with_ref["rel_err_My"].max()) if not with_ref.empty else np.nan,
-                "all_quadrant_ok": bool(group["quadrant_agreement"].all()),
-                "all_sign_ok_Mx": bool(group["sign_agreement_Mx"].all()),
-                "all_sign_ok_My": bool(group["sign_agreement_My"].all()),
+                "all_quadrant_ok": bool(with_ref["quadrant_agreement"].all()) if not with_ref.empty else np.nan,
+                "all_sign_ok_Mx": bool(with_ref["sign_agreement_Mx"].all()) if not with_ref.empty else np.nan,
+                "all_sign_ok_My": bool(with_ref["sign_agreement_My"].all()) if not with_ref.empty else np.nan,
                 "max_candidate_count": int(group["candidate_count"].max()),
             }
         )

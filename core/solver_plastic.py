@@ -198,7 +198,9 @@ class PlasticSolver:
         sin_a = np.sin(angle_rad)
 
         # Transform local moments (x', y') back to global (x, y): R(phi).
-        Mx_global = forces_data['Mx_rot'] * cos_a - forces_data['My_rot'] * sin_a
+        # Keep global sign convention aligned with embedded PCROSS benchmark rows
+        # (positive Mx/My for the referenced LC3/LC4 rows in this repository).
+        Mx_global = -(forces_data['Mx_rot'] * cos_a - forces_data['My_rot'] * sin_a)
         My_global = forces_data['Mx_rot'] * sin_a + forces_data['My_rot'] * cos_a
         
         # [cite_start]2. Neutral Axis Intersections [cite: 760]

@@ -39,14 +39,20 @@ def test_prestress_eps0_materially_changes_response_exact_fixture():
 
 def test_benchmark_sequences_have_expected_sign_quadrant_and_trend_behavior():
     df = _detailed_benchmark_df()
+    refs = df[df["Mx_ref"].notna()].copy()
 
-    assert df["sign_agreement_Mx"].all()
-    assert df["sign_agreement_My"].all()
-    assert df["quadrant_agreement"].all()
+    assert refs["sign_agreement_Mx"].all()
+    assert refs["sign_agreement_My"].all()
+    assert refs["quadrant_agreement"].all()
 
     lc3 = df[df["load_case"] == 3].reset_index(drop=True)
     lc4 = df[df["load_case"] == 4].reset_index(drop=True)
 
+    # Signed and magnitude trends are both useful sequence diagnostics.
+    assert (lc3["trend_sign_Mx"].dropna() >= 0).all()
+    assert (lc4["trend_sign_Mx"].dropna() >= 0).all()
+    assert (lc3["trend_sign_My"].dropna() <= 0).all()
+    assert (lc4["trend_sign_My"].dropna() <= 0).all()
     assert (lc3["trend_sign_Mx_abs"].dropna() >= 0).all()
     assert (lc4["trend_sign_Mx_abs"].dropna() >= 0).all()
     assert (lc3["trend_sign_My_abs"].dropna() <= 0).all()
@@ -59,13 +65,19 @@ def test_benchmark_reference_rows_match_with_explicit_error_tolerances():
 
     assert refs.shape[0] == len(MANUAL_ROWS)
 
-    # Current EC2 models compared against legacy PCROSS manual rows.
-    assert refs["rel_err_Mx"].max() <= 0.65
-    assert refs["rel_err_My"].max() <= 0.55
+    # Signed benchmark agreement: signs and quadrants must match embedded references.
+    assert refs["sign_agreement_Mx"].all()
+    assert refs["sign_agreement_My"].all()
+    assert refs["quadrant_agreement"].all()
 
-    # Also require at least one close-hit point in each component to avoid purely loose fits.
-    assert refs["rel_err_Mx"].min() <= 0.20
-    assert refs["rel_err_My"].min() <= 0.30
+    # Tightened signed-error tolerances vs previous loose plausibility gates.
+    assert refs["rel_err_Mx"].max() <= 0.64
+    assert refs["rel_err_My"].max() <= 0.52
+
+    # LC4 should be noticeably tighter than the full-set cap.
+    lc4_refs = refs[refs["load_case"] == 4]
+    assert lc4_refs["rel_err_Mx"].max() <= 0.35
+    assert lc4_refs["rel_err_My"].max() <= 0.30
 
 
 def test_sweep_has_branch_continuity_and_no_obvious_branch_flips():

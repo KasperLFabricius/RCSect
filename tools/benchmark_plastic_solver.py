@@ -49,10 +49,17 @@ def main() -> None:
             "Mx_calc",
             "My_ref",
             "My_calc",
+            "sign_agreement_Mx",
+            "sign_agreement_My",
+            "quadrant_expected",
+            "quadrant_calc",
+            "quadrant_agreement",
             "abs_err_Mx",
             "abs_err_My",
             "rel_err_Mx",
             "rel_err_My",
+            "abs_mag_err_Mx",
+            "abs_mag_err_My",
             "candidate_count",
             "pivot",
             "selected_branch",
@@ -62,6 +69,8 @@ def main() -> None:
     md = "# Plastic Solver Benchmark Summary\n\n"
     md += _markdown_table(summary)
     md += "\n\n## Referenced rows\n\n"
+    md += "Signed errors (abs/rel) are primary benchmark metrics. "
+    md += "Magnitude-only errors (abs_mag_err_*) are secondary diagnostics.\n\n"
     md += _markdown_table(referenced)
     summary_md.write_text(md, encoding="utf-8")
 
