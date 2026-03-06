@@ -3,7 +3,7 @@ import math
 from core.geometry import CrossSection
 from core.materials import Concrete, MildSteel, PrestressedSteel
 from core.solver_plastic import PlasticSolver
-from ui.results import prepare_plastic_results_dataframe
+from ui.results import prepare_plastic_results_tables
 
 
 def _build_cross_section(include_prestress: bool) -> CrossSection:
@@ -98,7 +98,7 @@ def test_solver_result_schema_without_prestressed_bars():
     assert result["strain_prestressed"] is None
 
 
-def test_prepare_plastic_results_dataframe_adds_schema_and_export_columns():
+def test_prepare_plastic_results_tables_adds_schema_and_export_columns():
     plastic_rows = [
         {
             "Mx": 100.0,
@@ -120,12 +120,14 @@ def test_prepare_plastic_results_dataframe_adds_schema_and_export_columns():
         }
     ]
 
-    df = prepare_plastic_results_dataframe(plastic_rows, target_P=200.0)
+    df_display, export_df = prepare_plastic_results_tables(plastic_rows, target_P=200.0)
 
-    assert "U (deg)" in df.columns
-    assert "R (m)" in df.columns
-
-    export_df = df.attrs["export_df"]
+    assert "U (deg)" in df_display.columns
+    assert "R (m)" in df_display.columns
+    assert df_display.attrs == {}
+    assert export_df.attrs == {}
+    assert math.isclose(df_display.loc[0, "U (deg)"], math.degrees(math.atan2(100.0, 40.0)))
+    assert math.isclose(df_display.loc[0, "R (m)"], math.sqrt(100.0**2 + 40.0**2) / 200.0)
     expected_export_cols = {
         "Mx_kNm",
         "My_kNm",

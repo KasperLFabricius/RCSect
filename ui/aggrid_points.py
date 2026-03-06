@@ -22,17 +22,36 @@ def _coerce_numeric(value):
         return None
 
 
-def edit_ordered_points(points, key_prefix) -> list[dict]:
+def build_ordered_points_editor_df(points: list[dict] | None) -> pd.DataFrame:
     ordered_points = sorted(points or [], key=lambda pt: pt.get("id", 0))
     rows = [
         {"id": i, "x": pt.get("x"), "y": pt.get("y")}
         for i, pt in enumerate(ordered_points, start=1)
     ]
-    rows.extend([
-        {"id": "", "x": None, "y": None},
-        {"id": "", "x": None, "y": None},
-    ])
+    rows.extend(
+        [
+            {"id": pd.NA, "x": None, "y": None},
+            {"id": pd.NA, "x": None, "y": None},
+        ]
+    )
     df_points = pd.DataFrame(rows, columns=["id", "x", "y"])
+    df_points["id"] = df_points["id"].astype("Int64")
+    return df_points
+
+
+def clean_ordered_point_records(records: list[dict]) -> list[dict]:
+    cleaned = []
+    for row in records:
+        x = _coerce_numeric(row.get("x"))
+        y = _coerce_numeric(row.get("y"))
+        if x is None or y is None:
+            continue
+        cleaned.append({"id": len(cleaned) + 1, "x": x, "y": y})
+    return cleaned
+
+
+def edit_ordered_points(points, key_prefix) -> list[dict]:
+    df_points = build_ordered_points_editor_df(points)
 
     grid_options = {
         "defaultColDef": {"sortable": False, "filter": False, "resizable": True},
@@ -71,12 +90,4 @@ def edit_ordered_points(points, key_prefix) -> list[dict]:
     data = result.get("data", df_points)
     records = data.to_dict("records") if hasattr(data, "to_dict") else list(data)
 
-    cleaned = []
-    for row in records:
-        x = _coerce_numeric(row.get("x"))
-        y = _coerce_numeric(row.get("y"))
-        if x is None or y is None:
-            continue
-        cleaned.append({"id": len(cleaned) + 1, "x": x, "y": y})
-
-    return cleaned
+    return clean_ordered_point_records(records)
