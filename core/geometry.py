@@ -49,12 +49,10 @@ class CrossSection:
         for bar in bars:
             x_rot = bar['x'] * cos_a - bar['y'] * sin_a
             y_rot = bar['x'] * sin_a + bar['y'] * cos_a
-            rotated_bars.append({
-                'id': bar['id'],
-                'x': x_rot,
-                'y': y_rot,
-                'area': bar['area']
-            })
+            rotated_bar = dict(bar)
+            rotated_bar['x'] = x_rot
+            rotated_bar['y'] = y_rot
+            rotated_bars.append(rotated_bar)
         return rotated_bars
 
 def split_compression_zone(rotated_poly: Polygon, y_na: float, y_c2: float = None):

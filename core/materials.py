@@ -118,12 +118,15 @@ class MildSteel:
 
 class PrestressedSteel:
     """
-    Prestressing Steel Model incorporating initial prestrain.
+    Prestressing steel stress-strain model.
+
+    The solver is responsible for assembling total bar strain, including any
+    prestress initial strain offsets.
     """
-    def __init__(self, f_p01k: float, f_pk: float, initial_strain: float, 
-                 e_uk: float, gamma_s: float = 1.20, E_p: float = 195000.0):
+    def __init__(self, f_p01k: float, f_pk: float, e_uk: float, gamma_s: float = 1.20, E_p: float = 195000.0, initial_strain: float = 0.0):
         self.f_p01k = f_p01k
         self.f_pk = f_pk
+        # Backward-compatibility only: solver now applies per-bar initial strain.
         self.initial_strain = initial_strain
         self.gamma_s = gamma_s
         self.E_p = E_p
@@ -134,12 +137,11 @@ class PrestressedSteel:
         # Design ultimate strain limit per EC2 (typically 0.9 * characteristic limit)
         self.eps_ud = 0.9 * e_uk
         
-    def stress(self, geometric_eps: np.ndarray) -> np.ndarray:
+    def stress(self, total_eps: np.ndarray) -> np.ndarray:
         """
-        Calculates the prestressing steel stress by adding the initial prestrain
-        to the section's geometric strain.
+        Calculates prestressing steel stress from total bar strain.
         """
-        total_eps = np.asarray(geometric_eps) + self.initial_strain
+        total_eps = np.asarray(total_eps)
         sigma = np.zeros_like(total_eps, dtype=float)
         
         abs_eps = np.abs(total_eps)
