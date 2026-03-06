@@ -181,7 +181,7 @@ def _input_hash(data: dict) -> str:
 
 
 def main():
-    st.set_page_config(page_title="RCSect", page_icon="🏗", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title="RCSect", page_icon="\U0001F3D7", layout="wide", initial_sidebar_state="expanded")
     st.title("RCSect: Reinforced Concrete Section Analysis")
 
     initialize_session_state()
