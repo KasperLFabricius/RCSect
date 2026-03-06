@@ -29,11 +29,13 @@ def _normalize_case_name(case_name) -> tuple[str, str]:
 
     return display_name, slug
 
-def prepare_plastic_results_dataframe(plastic_output: list, target_P: float | None = None) -> pd.DataFrame:
-    """Normalize plastic solver output for display/export tables."""
-    df_plastic = pd.DataFrame(plastic_output or [])
-    if df_plastic.empty:
-        return df_plastic
+def prepare_plastic_results_tables(
+    plastic_output: list, target_P: float | None = None
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Normalize plastic solver output for display and export tables."""
+    df_display = pd.DataFrame(plastic_output or []).copy()
+    if df_display.empty:
+        return df_display, pd.DataFrame()
 
     for col in [
         "Mx",
@@ -53,12 +55,13 @@ def prepare_plastic_results_dataframe(plastic_output: list, target_P: float | No
         "warning",
         "pivot",
     ]:
-        if col not in df_plastic.columns:
-            df_plastic[col] = None
+        if col not in df_display.columns:
+            df_display[col] = None
 
     denom = target_P if target_P not in (None, 0) else np.nan
-    df_plastic["R (m)"] = np.sqrt(df_plastic["Mx"] ** 2 + df_plastic["My"] ** 2) / denom
-    df_plastic["U (deg)"] = np.degrees(np.arctan2(df_plastic["Mx"], df_plastic["My"]))
+    df_display["R (m)"] = np.sqrt(df_display["Mx"] ** 2 + df_display["My"] ** 2) / denom
+    df_display["U (deg)"] = np.degrees(np.arctan2(df_display["Mx"], df_display["My"]))
+    df_display.attrs = {}
 
     export_rename = {
         "Mx": "Mx_kNm",
@@ -76,7 +79,7 @@ def prepare_plastic_results_dataframe(plastic_output: list, target_P: float | No
         "lever_DX": "lever_DX_m",
         "lever_DY": "lever_DY_m",
     }
-    df_export = df_plastic.rename(columns=export_rename)
+    df_export = df_display.rename(columns=export_rename)
     ordered_cols = [
         "Mx_kNm",
         "My_kNm",
@@ -98,8 +101,10 @@ def prepare_plastic_results_dataframe(plastic_output: list, target_P: float | No
     for col in ordered_cols:
         if col not in df_export.columns:
             df_export[col] = None
-    df_plastic.attrs["export_df"] = df_export[ordered_cols].copy()
-    return df_plastic
+
+    df_export = df_export[ordered_cols].copy()
+    df_export.attrs = {}
+    return df_display, df_export
 
 
 def render_geometry_exports(geometry: dict):
@@ -262,7 +267,7 @@ def render_plastic_results(plastic_output: list, target_P: float):
         st.warning("No plastic calculation data generated.")
         return
 
-    df_plastic = prepare_plastic_results_dataframe(plastic_output, target_P=target_P)
+    df_plastic, _ = prepare_plastic_results_tables(plastic_output, target_P=target_P)
     display_cols = [
         c
         for c in [
@@ -377,7 +382,7 @@ def render_plastic_results(plastic_output: list, target_P: float):
 
 def render_plastic_export(case_name: str, plastic_output: list, data: dict | None = None):
     safe_label, safe_slug = _normalize_case_name(case_name)
-    df_plastic = prepare_plastic_results_dataframe(plastic_output).attrs.get("export_df", pd.DataFrame())
+    _, df_plastic = prepare_plastic_results_tables(plastic_output)
     settings = (data or {}).get("analysis_settings", {})
     mild = ((data or {}).get("materials", {})).get("mild_steel", {})
     meta_df = pd.DataFrame(
