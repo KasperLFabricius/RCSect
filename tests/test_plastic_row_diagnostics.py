@@ -106,3 +106,30 @@ def test_contribution_study_reports_cases_and_error_breakdown():
     # FU has no observable effect for this six-row set; case D ~= case C.
     assert np.isclose(float(row_d["max_rel_err_Mx"]), float(row_c["max_rel_err_Mx"]), rtol=0.0, atol=1e-12)
     assert np.isclose(float(row_d["max_rel_err_My"]), float(row_c["max_rel_err_My"]), rtol=0.0, atol=1e-12)
+
+
+from tests.benchmark_compare import BenchmarkSweepSpec, run_benchmark_sweeps
+from tests.pcross_benchmark_fixture import EMBEDDED_BENCHMARK_CASES
+
+
+def test_extended_annular_diagnostics_intermediate_columns_present():
+    for key in ["section0", "sectioniv"]:
+        case = EMBEDDED_BENCHMARK_CASES[key]
+        df = run_benchmark_sweeps(
+            case.solver_builder(),
+            [BenchmarkSweepSpec(case.load_case, case.load.P_target, case.load.angles_deg)],
+            reference_rows=case.reference_rows,
+        )
+        refs = df[df["Mx_ref"].notna()]
+        for col in [
+            "strain_concrete_calc",
+            "strain_mild_calc",
+            "kappa_calc",
+            "compress_force_calc",
+            "L_calc",
+            "DX_calc",
+            "DY_calc",
+            "warning_ref",
+        ]:
+            assert col in refs.columns
+            assert refs[col].notna().any()
