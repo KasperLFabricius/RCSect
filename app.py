@@ -65,6 +65,18 @@ def build_computational_models(data):
     return cross_section, concrete, mild_steel, prestressed_steel
 
 
+def _safe_case_name(case: dict) -> str:
+    raw_name = case.get("name")
+    if isinstance(raw_name, str):
+        stripped = raw_name.strip()
+        if stripped:
+            return stripped
+    case_id = case.get("id")
+    if case_id is not None and str(case_id).strip() != "":
+        return f"Load case {case_id}"
+    return "Unnamed case"
+
+
 def _compute_results(data: dict):
     mode = data["analysis_settings"]["mode"]
     can_run_analysis = bool(data["geometry"].get("concrete_outline"))
@@ -86,7 +98,7 @@ def _compute_results(data: dict):
             E_s=e_s_eff_mpa,
         )
         for case in data.get("load_cases", {}).get("elastic", []):
-            case_name = case.get("name", "Unnamed")
+            case_name = _safe_case_name(case)
             try:
                 el_results = elastic_engine.solve_combined_loads(
                     P_l=case.get("P_l", 0.0),
@@ -105,7 +117,7 @@ def _compute_results(data: dict):
     if mode in ["Plastic", "Both"]:
         plastic_engine = PlasticSolver(cs, conc, mild, pre)
         for case in data.get("load_cases", {}).get("plastic", []):
-            case_name = case.get("name", "Unnamed")
+            case_name = _safe_case_name(case)
             v_inc = case.get("v_inc", 0.0)
             v_min = case.get("v_min", 0.0)
             v_max = case.get("v_max", 0.0)

@@ -10,6 +10,26 @@ def _to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
 
 
+
+def _normalize_case_name(case_name) -> tuple[str, str]:
+    if isinstance(case_name, str):
+        display_name = case_name.strip()
+    elif case_name is None:
+        display_name = ""
+    else:
+        display_name = str(case_name).strip()
+
+    if not display_name:
+        display_name = "Unnamed case"
+
+    slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in display_name)
+    slug = "_".join(part for part in slug.split("_") if part)
+    if not slug:
+        slug = "unnamed_case"
+
+    return display_name, slug
+
+
 def render_geometry_exports(geometry: dict):
     st.markdown("#### Exports")
     outline_df = pd.DataFrame(geometry.get("concrete_outline", []), columns=["id", "x_m", "y_m"])
@@ -91,6 +111,7 @@ def render_elastic_results(elastic_output: dict):
 
 
 def render_elastic_export(case_name: str, elastic_output: dict, data: dict | None = None):
+    safe_label, safe_slug = _normalize_case_name(case_name)
     rows = []
     settings = (data or {}).get("analysis_settings", {})
     mild = ((data or {}).get("materials", {})).get("mild_steel", {})
@@ -122,9 +143,9 @@ def render_elastic_export(case_name: str, elastic_output: dict, data: dict | Non
             rows.append({"metric": key, "item": "", "value": value})
     df = pd.DataFrame(rows, columns=["metric", "item", "value"])
     st.download_button(
-        f"Download elastic CSV: {case_name}",
+        f"Download elastic CSV: {safe_label}",
         data=_to_csv_bytes(df),
-        file_name=f"elastic_{case_name.replace(' ', '_')}.csv",
+        file_name=f"elastic_{safe_slug}.csv",
         mime="text/csv",
     )
 
@@ -212,6 +233,7 @@ def render_plastic_results(plastic_output: list, target_P: float):
 
 
 def render_plastic_export(case_name: str, plastic_output: list, data: dict | None = None):
+    safe_label, safe_slug = _normalize_case_name(case_name)
     df_plastic = pd.DataFrame(plastic_output)
     df_plastic = df_plastic.rename(columns={"Mx": "Mx_kNm", "My": "My_kNm", "V": "V_deg", "y_na": "y_na_m", "kappa": "kappa_1_per_m"})
     settings = (data or {}).get("analysis_settings", {})
@@ -226,8 +248,8 @@ def render_plastic_export(case_name: str, plastic_output: list, data: dict | Non
     )
     df_export = pd.concat([meta_df, pd.DataFrame([{}]), df_plastic], ignore_index=True, sort=False)
     st.download_button(
-        f"Download plastic CSV: {case_name}",
+        f"Download plastic CSV: {safe_label}",
         data=_to_csv_bytes(df_export),
-        file_name=f"plastic_{case_name.replace(' ', '_')}.csv",
+        file_name=f"plastic_{safe_slug}.csv",
         mime="text/csv",
     )
