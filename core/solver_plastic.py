@@ -301,6 +301,10 @@ class PlasticSolver:
 
         def integrate_triangle(triangle: Polygon):
             nonlocal I0, Ix, Iy
+            if len(triangle.interiors) > 0:
+                integrate_geom(triangle)
+                return
+
             coords = list(triangle.exterior.coords)[:-1]
             if len(coords) != 3:
                 integrate_geom(triangle)
@@ -338,7 +342,7 @@ class PlasticSolver:
 
             if isinstance(geom, Polygon):
                 coords = list(geom.exterior.coords)[:-1]
-                if len(coords) == 3:
+                if len(coords) == 3 and len(geom.interiors) == 0:
                     integrate_triangle(geom)
                     return
 
