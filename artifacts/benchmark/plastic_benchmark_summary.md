@@ -87,19 +87,38 @@ Signed errors (abs/rel) are primary benchmark metrics. Magnitude-only errors rem
 | baseline | snit_d | 0.014344290636897765 | 0.005866392485544505 | 2.0054385067371756 | 1.4592662917457229 | 0.005985823876204029 | 0.009612267109583615 | -0.004820496043268657 | 0.011950745678348085 | -0.05503791645455469 | 0.021896779435906497 |
 | refined | snit_d | 0.02395655774648138 | 0.0010458964422758478 | 2.0173892524155237 | 1.4042283752911682 | 0.027882603312110527 | 0.009612267109583615 | -0.004820496043268657 | 0.011950745678348085 | -0.05503791645455469 | 0.021896779435906497 |
 
-## Sub-1% readiness by fixture family and output group
+## Output-semantics candidates and winners
+
+Chosen winners (majority across fixture families):
+
+- strain_mild: `strain_mild:max_tension`
+- compress_force: `compress_force:concrete_plus_all_comp_steel`
+- lever_L: `lever:total_comp_to_tension:L`
+- lever_DX: `lever:total_comp_to_tension:DX`
+
+
+## Semantic gap (before vs semantic-aligned benchmark comparison)
+
+| group | max_rel_before | max_rel_after | delta |
+| --- | --- | --- | --- |
+| moments | 0.07473616156367238 | 0.07473616156367238 | 0.0 |
+| strains | 2.064979612190433 | 2.064979612190433 | 0.0 |
+| compression force | 1.8031324908629793 | 1.8031324908629793 | 0.0 |
+| lever-arms | 1.999764673200672 | 2.4179749321480672 | 0.4182102589473953 |
+
+## Sub-1% readiness by fixture family and output group (after semantic alignment)
 
 | fixture_family | output_group | max_rel_err | band |
 | --- | --- | --- | --- |
 | annular | compression force | 0.002895597231681938 | <1% |
 | annular | curvature | 0.006173773436443466 | <1% |
-| annular | lever-arms | 1.999764673200672 | >5% |
+| annular | lever-arms | 2.4179749321480672 | >5% |
 | annular | moments | 0.006124792013084018 | <1% |
 | annular | strains | 2.0127595977897648 | >5% |
 | annular | warnings | nan | match=1.000 |
 | snit | compression force | 1.8031324908629793 | >5% |
 | snit | curvature | 0.017285232770556512 | 1-5% |
-| snit | lever-arms | 0.9409981042959045 | >5% |
+| snit | lever-arms | 1.402944820342888 | >5% |
 | snit | moments | 0.01544923061090369 | 1-5% |
 | snit | strains | 2.064979612190433 | >5% |
 | snit | warnings | nan | N/A |

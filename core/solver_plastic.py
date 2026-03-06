@@ -30,6 +30,12 @@ def _bar_force_kN(sigma_mpa: float, area_mm2: float) -> float:
     return float(sigma_mpa) * float(area_mm2) * 1e-3
 
 
+def _max_by_abs(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return max(values, key=lambda v: abs(v))
+
+
 class PlasticSolver:
     """
     Calculates the ultimate flexural capacity of a cross section 
@@ -222,21 +228,11 @@ class PlasticSolver:
         # [cite_start]3. Maximum Strains [cite: 761]
         max_concrete_strain = kappa * (self.y_top - y_na_solution) * 1000.0 # per mille
         max_mild_strain = 0.0
-        if self.rebar_mild_rot:
-            max_mild_strain = max([kappa * (y_na_solution - bar['y']) for bar in self.rebar_mild_rot]) * 1000.0
+        if forces_data['mild_strains_total_permille']:
+            max_mild_strain = max(forces_data['mild_strains_total_permille'])
         max_prestressed_strain = None
-        if self.rebar_pre_rot:
-            # Keep the same reporting convention as strain_mild: report the maximum
-            # signed total strain among bars (tension-positive), in permille.
-            max_prestressed_strain = (
-                max(
-                    [
-                        kappa * (y_na_solution - bar['y']) + _effective_prestress_eps0(bar, self.prestrain_default)
-                        for bar in self.rebar_pre_rot
-                    ]
-                )
-                * 1000.0
-            )
+        if forces_data['prestressed_strains_total_permille']:
+            max_prestressed_strain = max(forces_data['prestressed_strains_total_permille'])
 
         # [cite_start]4. Lever Arm Calculations [cite: 762, 763, 773, 784]
         c_comp = forces_data['centroid_compression']
@@ -283,6 +279,15 @@ class PlasticSolver:
             "compression_rebar_force": compression_rebar_force,
             "full_design_concrete_force": full_design_concrete_force,
             "residual_abs": candidate.get('residual_abs', abs(self._equilibrium_target(y_na_solution, candidate.get('P_target', 0.0), pivot_type))),
+            "debug_force_components": forces_data,
+            "debug_strain_candidates": {
+                "strain_mild_max_tension_permille": max(forces_data['mild_strains_total_permille']) if forces_data['mild_strains_total_permille'] else None,
+                "strain_mild_max_compression_permille": min(forces_data['mild_strains_total_permille']) if forces_data['mild_strains_total_permille'] else None,
+                "strain_mild_governing_abs_permille": _max_by_abs(forces_data['mild_strains_total_permille']),
+                "strain_prestressed_max_tension_permille": max(forces_data['prestressed_strains_total_permille']) if forces_data['prestressed_strains_total_permille'] else None,
+                "strain_prestressed_max_compression_permille": min(forces_data['prestressed_strains_total_permille']) if forces_data['prestressed_strains_total_permille'] else None,
+                "strain_prestressed_governing_abs_permille": _max_by_abs(forces_data['prestressed_strains_total_permille']),
+            },
         }
 
     def _equilibrium_target(self, y_na: float, P_target: float, pivot: str) -> float:
@@ -362,9 +367,16 @@ class PlasticSolver:
         total_compression = 0.0
         total_tension = 0.0
         comp_rebar_force = 0.0
+        comp_mild_force = 0.0
+        comp_prestress_force = 0.0
+        conc_comp_force = 0.0
         
         sum_x_comp, sum_y_comp = 0.0, 0.0
         sum_x_tens, sum_y_tens = 0.0, 0.0
+        sum_x_conc_comp, sum_y_conc_comp = 0.0, 0.0
+
+        mild_bar_rows = []
+        prestressed_bar_rows = []
 
         # Internal force basis in this routine:
         # - stresses: MPa (N/mm²)
@@ -387,12 +399,24 @@ class PlasticSolver:
                 abs_f = abs(force)
                 total_compression += abs_f
                 comp_rebar_force += abs_f
+                comp_mild_force += abs_f
                 sum_x_comp += abs_f * bar['x']
                 sum_y_comp += abs_f * bar['y']
             else:
                 total_tension += force
                 sum_x_tens += force * bar['x']
                 sum_y_tens += force * bar['y']
+
+            mild_bar_rows.append(
+                {
+                    'id': bar.get('id'),
+                    'x': float(bar['x']),
+                    'y': float(bar['y']),
+                    'strain_total': float(eps),
+                    'stress_mpa': float(sigma),
+                    'force_kN': float(force),
+                }
+            )
                 
         # --- PRESTRESSED STEEL ---
         if self.prestressed_steel:
@@ -410,12 +434,24 @@ class PlasticSolver:
                     abs_f = abs(force)
                     total_compression += abs_f
                     comp_rebar_force += abs_f
+                    comp_prestress_force += abs_f
                     sum_x_comp += abs_f * bar['x']
                     sum_y_comp += abs_f * bar['y']
                 else:
                     total_tension += force
                     sum_x_tens += force * bar['x']
                     sum_y_tens += force * bar['y']
+
+                prestressed_bar_rows.append(
+                    {
+                        'id': bar.get('id'),
+                        'x': float(bar['x']),
+                        'y': float(bar['y']),
+                        'strain_total': float(total_eps),
+                        'stress_mpa': float(sigma),
+                        'force_kN': float(force),
+                    }
+                )
                 
         # --- CONCRETE ---
         y_c2 = y_na + (self.concrete.eps_c2 / kappa) if kappa != 0 else y_na
@@ -434,8 +470,11 @@ class PlasticSolver:
             My_rot += force * centroid.x
             
             total_compression += abs_f
+            conc_comp_force += abs_f
             sum_x_comp += abs_f * centroid.x
             sum_y_comp += abs_f * centroid.y
+            sum_x_conc_comp += abs_f * centroid.x
+            sum_y_conc_comp += abs_f * centroid.y
             
         if poly_parabola is not None and not poly_parabola.is_empty:
             F_p, Mxp_p, Myp_p, cx, cy = self._integrate_parabola(poly_parabola, y_na, kappa)
@@ -446,12 +485,17 @@ class PlasticSolver:
             My_rot += Myp_p
             
             total_compression += abs_f
+            conc_comp_force += abs_f
             sum_x_comp += abs_f * cx
             sum_y_comp += abs_f * cy
+            sum_x_conc_comp += abs_f * cx
+            sum_y_conc_comp += abs_f * cy
 
         # Centroid Resolutions
         c_comp = {'x': sum_x_comp / total_compression if total_compression > 0 else 0.0,
                   'y': sum_y_comp / total_compression if total_compression > 0 else 0.0}
+        c_conc_comp = {'x': sum_x_conc_comp / conc_comp_force if conc_comp_force > 0 else None,
+                       'y': sum_y_conc_comp / conc_comp_force if conc_comp_force > 0 else None}
         c_tens = {'x': sum_x_tens / total_tension if total_tension > 0 else None,
                   'y': sum_y_tens / total_tension if total_tension > 0 else None}
 
@@ -460,9 +504,22 @@ class PlasticSolver:
             'Mx_rot': Mx_rot,
             'My_rot': My_rot,
             'total_compression': total_compression,
+            'total_tension': total_tension,
+            'concrete_compression': conc_comp_force,
+            'compression_mild': comp_mild_force,
+            'compression_prestress': comp_prestress_force,
             'compression_rebar_force': comp_rebar_force,
+            'centroid_concrete_compression': c_conc_comp,
             'centroid_compression': c_comp,
-            'centroid_tension': c_tens
+            'centroid_tension': c_tens,
+            'mild_bar_details': mild_bar_rows,
+            'prestressed_bar_details': prestressed_bar_rows,
+            'mild_strains_total_permille': [float(r['strain_total'] * 1000.0) for r in mild_bar_rows],
+            'prestressed_strains_total_permille': [float(r['strain_total'] * 1000.0) for r in prestressed_bar_rows],
+            'mild_stresses_mpa': [float(r['stress_mpa']) for r in mild_bar_rows],
+            'prestressed_stresses_mpa': [float(r['stress_mpa']) for r in prestressed_bar_rows],
+            'mild_forces_kN': [float(r['force_kN']) for r in mild_bar_rows],
+            'prestressed_forces_kN': [float(r['force_kN']) for r in prestressed_bar_rows],
         }
 
     def _integrate_parabola(self, polygon, y_na, kappa):

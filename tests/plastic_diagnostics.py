@@ -262,6 +262,187 @@ def run_type6_prestress_mapping_study() -> pd.DataFrame:
         )
     return out
 
+
+def _safe_rel_err(calc: float | None, ref: float | None) -> float:
+    if calc is None or ref is None:
+        return np.nan
+    if not np.isfinite(calc) or not np.isfinite(ref):
+        return np.nan
+    return abs(float(calc) - float(ref)) / max(abs(float(ref)), 1e-12)
+
+
+def _sign_agreement(calc: float | None, ref: float | None, tol: float = 1e-9) -> float:
+    if calc is None or ref is None:
+        return np.nan
+    if not np.isfinite(calc) or not np.isfinite(ref):
+        return np.nan
+    if abs(float(ref)) <= tol:
+        return np.nan
+    return float(np.sign(float(calc)) == np.sign(float(ref)))
+
+
+def _lever_from_centroids(c_comp: dict | None, c_tens: dict | None) -> tuple[float, float, float]:
+    if not c_comp or not c_tens:
+        return (np.nan, np.nan, np.nan)
+    if c_comp.get("x") is None or c_comp.get("y") is None or c_tens.get("x") is None or c_tens.get("y") is None:
+        return (np.nan, np.nan, np.nan)
+    dx = float(c_comp["x"] - c_tens["x"])
+    dy = float(c_comp["y"] - c_tens["y"])
+    return (float(np.sqrt(dx * dx + dy * dy)), dx, dy)
+
+
+def _row_semantic_candidates(row: dict) -> dict[str, float]:
+    dbg = row.get("debug_force_components") or {}
+    mild = [float(v) for v in (dbg.get("mild_strains_total_permille") or [])]
+    prest = [float(v) for v in (dbg.get("prestressed_strains_total_permille") or [])]
+
+    def _max_abs(vals: list[float]) -> float:
+        if not vals:
+            return np.nan
+        return float(max(vals, key=lambda v: abs(v)))
+
+    out: dict[str, float] = {}
+
+    out["strain_mild:max_tension"] = float(max(mild)) if mild else np.nan
+    out["strain_mild:max_compression"] = float(min(mild)) if mild else np.nan
+    out["strain_mild:governing_abs_signed"] = _max_abs(mild)
+
+    out["strain_prestressed:max_tension"] = float(max(prest)) if prest else np.nan
+    out["strain_prestressed:max_compression"] = float(min(prest)) if prest else np.nan
+    out["strain_prestressed:governing_abs_signed"] = _max_abs(prest)
+
+    conc = float(dbg.get("concrete_compression", np.nan))
+    comp_mild = float(dbg.get("compression_mild", np.nan))
+    comp_pre = float(dbg.get("compression_prestress", np.nan))
+    total_comp = float(dbg.get("total_compression", np.nan))
+
+    out["compress_force:concrete_only"] = conc
+    out["compress_force:concrete_plus_comp_rebar"] = conc + comp_mild
+    out["compress_force:concrete_plus_all_comp_steel"] = conc + comp_mild + comp_pre
+    out["compress_force:total_compression_abs"] = total_comp
+
+    l_tot, dx_tot, dy_tot = _lever_from_centroids(dbg.get("centroid_compression"), dbg.get("centroid_tension"))
+    l_conc, dx_conc, dy_conc = _lever_from_centroids(dbg.get("centroid_concrete_compression"), dbg.get("centroid_tension"))
+
+    out["lever:total_comp_to_tension:L"] = l_tot
+    out["lever:total_comp_to_tension:DX"] = dx_tot
+    out["lever:total_comp_to_tension:DY"] = dy_tot
+    out["lever:total_comp_to_tension:DY_negated"] = -dy_tot if np.isfinite(dy_tot) else np.nan
+
+    out["lever:concrete_comp_to_tension:L"] = l_conc
+    out["lever:concrete_comp_to_tension:DX"] = dx_conc
+    out["lever:concrete_comp_to_tension:DY"] = dy_conc
+    out["lever:concrete_comp_to_tension:DY_negated"] = -dy_conc if np.isfinite(dy_conc) else np.nan
+
+    m = np.sqrt(float(row.get("Mx", np.nan)) ** 2 + float(row.get("My", np.nan)) ** 2)
+    out["lever:moment_over_total_compression:L"] = float(m / total_comp) if np.isfinite(m) and np.isfinite(total_comp) and total_comp > 1e-12 else np.nan
+
+    return out
+
+
+def run_output_semantics_study() -> tuple[pd.DataFrame, pd.DataFrame]:
+    from tests.benchmark_compare import BenchmarkSweepSpec
+
+    case_rows = []
+    for key in ["tbeam", "snit_a", "snit_b", "snit_c", "snit_d", "section0", "sectioniv"]:
+        if key == "tbeam":
+            solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
+            specs = [
+                BenchmarkSweepSpec(load_case=3, p_target=LOAD_CASE_3.P_target, angles_deg=LOAD_CASE_3.angles_deg),
+                BenchmarkSweepSpec(load_case=4, p_target=LOAD_CASE_4.P_target, angles_deg=LOAD_CASE_4.angles_deg),
+            ]
+            refs = MANUAL_ROW_DIAGNOSTICS
+            family = "tbeam"
+        else:
+            case = EMBEDDED_BENCHMARK_CASES[key]
+            solver = case.solver_builder()
+            specs = [BenchmarkSweepSpec(load_case=case.load_case, p_target=case.load.P_target, angles_deg=case.load.angles_deg)]
+            refs = case.reference_rows
+            family = "snit" if key.startswith("snit") else "annular"
+
+        for spec in specs:
+            solved = solver.solve_angle_sweep(spec.angles_deg, spec.p_target)
+            by_angle = {float(r["angle_v_deg"]): r for r in solved}
+            for angle in spec.angles_deg:
+                a = float(angle)
+                row = by_angle[a]
+                ref = refs.get((spec.load_case, a), None)
+                if ref is None:
+                    continue
+                candidates = _row_semantic_candidates(row)
+                base = {"fixture": key, "fixture_family": family, "load_case": spec.load_case, "V_deg": a}
+                # output refs resolve L/DX/DY keys for non-manual fixtures
+                ref_map = {
+                    "strain_mild": ref.get("strain_mild"),
+                    "strain_prestressed": ref.get("strain_prestressed"),
+                    "compress_force": ref.get("compress_force"),
+                    "lever_L": ref.get("lever_L", ref.get("L")),
+                    "lever_DX": ref.get("lever_DX", ref.get("DX")),
+                    "lever_DY": ref.get("lever_DY", ref.get("DY")),
+                }
+                candidate_filters = {
+                    "strain_mild": lambda n: n.startswith("strain_mild:"),
+                    "strain_prestressed": lambda n: n.startswith("strain_prestressed:"),
+                    "compress_force": lambda n: n.startswith("compress_force:"),
+                    "lever_L": lambda n: n.startswith("lever:") and n.endswith(":L"),
+                    "lever_DX": lambda n: n.startswith("lever:") and n.endswith(":DX"),
+                    "lever_DY": lambda n: n.startswith("lever:") and (n.endswith(":DY") or n.endswith(":DY_negated")),
+                }
+                for output, rval in ref_map.items():
+                    if rval is None or not np.isfinite(float(rval)):
+                        continue
+                    rval_u = float(rval) * 10.0 if output.startswith("strain_") and abs(float(rval)) <= 1.0 else float(rval)
+                    filt = candidate_filters[output]
+                    for cname, cval in candidates.items():
+                        if not filt(cname):
+                            continue
+                        case_rows.append({
+                            **base,
+                            "output": output,
+                            "candidate": cname,
+                            "ref": rval_u,
+                            "calc": float(cval) if np.isfinite(cval) else np.nan,
+                            "signed_error": (float(cval) - rval_u) if np.isfinite(cval) else np.nan,
+                            "rel_error": _safe_rel_err(cval, rval_u),
+                            "sign_agreement": _sign_agreement(cval, rval_u),
+                        })
+
+    detail = pd.DataFrame(case_rows)
+    summary = (
+        detail.groupby(["fixture_family", "output", "candidate"], dropna=False)
+        .agg(
+            count=("rel_error", "count"),
+            max_rel_error=("rel_error", "max"),
+            median_rel_error=("rel_error", "median"),
+            median_signed_error=("signed_error", "median"),
+            sign_agreement_rate=("sign_agreement", "mean"),
+        )
+        .reset_index()
+        .sort_values(["fixture_family", "output", "max_rel_error", "median_rel_error"])
+        .reset_index(drop=True)
+    )
+    return detail, summary
+
+
+def choose_semantic_winners(summary: pd.DataFrame) -> dict[str, str]:
+    winners: dict[str, str] = {}
+    for output in ["strain_mild", "strain_prestressed", "compress_force", "lever_L", "lever_DX", "lever_DY"]:
+        sub = summary[summary["output"] == output]
+        if sub.empty:
+            continue
+        best_by_family = (
+            sub.sort_values(["fixture_family", "max_rel_error", "median_rel_error"])
+            .groupby("fixture_family", as_index=False)
+            .first()
+        )
+        counts = best_by_family["candidate"].value_counts()
+        if counts.empty:
+            continue
+        cand = counts.index[0]
+        if int(counts.iloc[0]) >= 2:
+            winners[output] = str(cand)
+    return winners
+
 def diagnostics_markdown(df: pd.DataFrame) -> str:
     cols = [
         "load_case",

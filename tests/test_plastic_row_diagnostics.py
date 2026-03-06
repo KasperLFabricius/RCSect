@@ -4,7 +4,9 @@ from tests.plastic_diagnostics import (
     classify_dominant_mismatch,
     diagnose_manual_rows,
     run_contribution_study,
+    run_output_semantics_study,
     run_type6_prestress_mapping_study,
+    choose_semantic_winners,
 )
 
 
@@ -154,3 +156,42 @@ def test_type6_mapping_study_reports_before_after_metrics_for_snit_ad():
     refined = study[study["mapping"] == "refined"]
     assert (refined["delta_refined_minus_baseline_max_rel_err_Mx"] < 0.02).all()
     assert (refined["delta_refined_minus_baseline_max_rel_err_My"] < 0.02).all()
+
+
+def test_output_semantics_study_produces_candidate_scores_and_partial_winners():
+    detail, summary = run_output_semantics_study()
+
+    assert not detail.empty
+    assert not summary.empty
+    assert {"fixture_family", "output", "candidate", "max_rel_error", "median_rel_error", "sign_agreement_rate"}.issubset(summary.columns)
+    assert set(summary["fixture_family"]) == {"tbeam", "snit", "annular"}
+
+    winners = choose_semantic_winners(summary)
+    # We should only lock in semantics when at least two families agree.
+    assert winners.get("compress_force") in {
+        "compress_force:total_compression_abs",
+        "compress_force:concrete_plus_all_comp_steel",
+        "compress_force:concrete_plus_comp_rebar",
+    }
+    assert "lever_DY" not in winners
+    assert "strain_prestressed" not in winners
+
+
+def test_semantic_aligned_profile_is_available_in_benchmark_sweeps():
+    case = EMBEDDED_BENCHMARK_CASES["section0"]
+    base = run_benchmark_sweeps(
+        case.solver_builder(),
+        [BenchmarkSweepSpec(case.load_case, case.load.P_target, case.load.angles_deg)],
+        reference_rows=case.reference_rows,
+    )
+    aligned = run_benchmark_sweeps(
+        case.solver_builder(),
+        [BenchmarkSweepSpec(case.load_case, case.load.P_target, case.load.angles_deg)],
+        reference_rows=case.reference_rows,
+        semantic_profile="semantic_aligned",
+    )
+
+    assert (base["semantic_profile"] == "reported").all()
+    assert (aligned["semantic_profile"] == "semantic_aligned").all()
+    assert aligned["rel_err_compress_force"].notna().all()
+    assert aligned["rel_err_L"].notna().all()

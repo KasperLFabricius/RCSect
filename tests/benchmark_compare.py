@@ -88,7 +88,65 @@ def _ref_to_solver_units(key: str, value: float) -> float:
     return value
 
 
-def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec], reference_rows: dict[tuple[int, float], dict] | None = None) -> pd.DataFrame:
+
+
+def _row_force_debug(row: dict, key: str, default=np.nan):
+    debug = row.get("debug_force_components")
+    if isinstance(debug, dict):
+        return debug.get(key, default)
+    return default
+
+
+def _semantic_outputs(row: dict, profile: str = "reported") -> dict[str, float]:
+    """Return benchmark comparison outputs under an explicit semantic profile."""
+    reported = {
+        "strain_mild": row.get("strain_mild", np.nan),
+        "strain_prestressed": row.get("strain_prestressed", np.nan),
+        "compress_force": row.get("compress_force", np.nan),
+        "L": row.get("lever_L", np.nan),
+        "DX": row.get("lever_DX", np.nan),
+        "DY": row.get("lever_DY", np.nan),
+    }
+    if profile == "reported":
+        return reported
+
+    c_tens = _row_force_debug(row, "centroid_tension", {}) or {}
+    c_comp = _row_force_debug(row, "centroid_compression", {}) or {}
+    c_conc = _row_force_debug(row, "centroid_concrete_compression", {}) or {}
+
+    dx_tot = np.nan
+    dy_tot = np.nan
+    if c_tens.get("x") is not None and c_tens.get("y") is not None and c_comp.get("x") is not None and c_comp.get("y") is not None:
+        dx_tot = float(c_comp["x"] - c_tens["x"])
+        dy_tot = float(c_comp["y"] - c_tens["y"])
+
+    dx_conc = np.nan
+    dy_conc = np.nan
+    if c_tens.get("x") is not None and c_tens.get("y") is not None and c_conc.get("x") is not None and c_conc.get("y") is not None:
+        dx_conc = float(c_conc["x"] - c_tens["x"])
+        dy_conc = float(c_conc["y"] - c_tens["y"])
+
+    if profile == "semantic_aligned":
+        # Conservative semantic alignment profile based on study winners that
+        # were consistent across fixture families. For ambiguous outputs
+        # (notably prestress strain and DY), keep reported semantics unchanged.
+        return {
+            "strain_mild": reported["strain_mild"],
+            "strain_prestressed": reported["strain_prestressed"],
+            "compress_force": _row_force_debug(row, "total_compression", reported["compress_force"]),
+            "L": float(np.sqrt(dx_tot**2 + dy_tot**2)) if np.isfinite(dx_tot) and np.isfinite(dy_tot) else reported["L"],
+            "DX": float(dx_tot) if np.isfinite(dx_tot) else reported["DX"],
+            "DY": float(dy_tot) if np.isfinite(dy_tot) else reported["DY"],
+        }
+
+    raise ValueError(f"Unknown semantic profile: {profile}")
+
+def run_benchmark_sweeps(
+    solver,
+    sweep_specs: list[BenchmarkSweepSpec],
+    reference_rows: dict[tuple[int, float], dict] | None = None,
+    semantic_profile: str = "reported",
+) -> pd.DataFrame:
     """Run solver sweeps and return one normalized DataFrame row per angle."""
     refs = MANUAL_ROWS if reference_rows is None else reference_rows
     rows: list[dict] = []
@@ -121,6 +179,8 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec], referenc
                 total_compression_force=float(row.get("compress_force", np.nan)),
             )
 
+            sem = _semantic_outputs(row, profile=semantic_profile)
+
             rows.append(
                 {
                     "load_case": spec.load_case,
@@ -143,17 +203,18 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec], referenc
                     "selected_candidate_index": row.get("selected_candidate_index"),
                     "pivot": row.get("pivot"),
                     "selected_branch": row.get("selection_source"),
+                    "semantic_profile": semantic_profile,
                     "residual_abs": float(row.get("residual_abs", np.nan)),
                     "strain_concrete_calc": float(row.get("strain_concrete", np.nan)),
-                    "strain_mild_calc": float(row.get("strain_mild", np.nan)),
-                    "strain_prestressed_calc": float(row.get("strain_prestressed", np.nan)) if row.get("strain_prestressed") is not None else np.nan,
+                    "strain_mild_calc": float(sem.get("strain_mild", np.nan)) if sem.get("strain_mild") is not None else np.nan,
+                    "strain_prestressed_calc": float(sem.get("strain_prestressed", np.nan)) if sem.get("strain_prestressed") is not None else np.nan,
                     "kappa_calc": float(row.get("kappa", np.nan)),
-                    "compress_force_calc": float(row.get("compress_force", np.nan)),
+                    "compress_force_calc": float(sem.get("compress_force", np.nan)) if sem.get("compress_force") is not None else np.nan,
                     "compression_rebar_force_calc": float(row.get("compression_rebar_force", np.nan)),
                     "full_design_concrete_force_calc": float(row.get("full_design_concrete_force", np.nan)),
-                    "L_calc": float(row.get("lever_L", np.nan)),
-                    "DX_calc": float(row.get("lever_DX", np.nan)),
-                    "DY_calc": float(row.get("lever_DY", np.nan)),
+                    "L_calc": float(sem.get("L", np.nan)) if sem.get("L") is not None else np.nan,
+                    "DX_calc": float(sem.get("DX", np.nan)) if sem.get("DX") is not None else np.nan,
+                    "DY_calc": float(sem.get("DY", np.nan)) if sem.get("DY") is not None else np.nan,
                     "warning_calc": row.get("warning"),
                     "warning_calc_est": warning_calc_est,
                     "y_na_calc": float(row.get("y_na", np.nan)),
