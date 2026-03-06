@@ -71,6 +71,10 @@ def build_pcross_tbeam_solver(prestress_eps0: float = 0.004) -> PlasticSolver:
 
     return PlasticSolver(
         cross_section=cs,
+        # Mapping note: the manual benchmark was built with legacy PCROSS material
+        # families; here we intentionally map to the current EC2-oriented RCSect
+        # families at gamma=1.0 to preserve nominal strengths while accepting that
+        # stress-block/ductility-shape differences may remain.
         concrete=Concrete(f_ck=18.0, gamma_c=1.0),
         mild_steel=MildSteel(f_yk=225.0, e_uk=0.20, gamma_s=1.0),
         prestressed_steel=PrestressedSteel(
@@ -100,4 +104,84 @@ MANUAL_ROWS = {
     (4, 5.0): {"Mx": 437.0, "My": 894.2},
     (4, 10.0): {"Mx": 561.4, "My": 869.8},
     (4, 15.0): {"Mx": 682.9, "My": 837.7},
+}
+
+
+
+# Detailed six-row diagnostic reference values embedded from the manual example
+# used by this repository. These are NOT new benchmark rows; they annotate the
+# existing MANUAL_ROWS entries with intermediate quantities for decomposition.
+MANUAL_ROW_DIAGNOSTICS = {
+    (3, 2.0): {
+        "U": 0.2391,
+        "R": 1.4066,
+        "strain_concrete": 3.500,
+        "strain_mild": 5.024,
+        "strain_prestressed": 8.553,
+        "kappa": 0.006404,
+        "compress_force": 3933.8,
+        "lever_L": 0.7441,
+        "lever_DX": 0.6110,
+        "lever_DY": 0.4245,
+    },
+    (3, 5.0): {
+        "U": 0.2229,
+        "R": 1.7226,
+        "strain_concrete": 3.500,
+        "strain_mild": 7.820,
+        "strain_prestressed": 10.612,
+        "kappa": 0.005805,
+        "compress_force": 3775.6,
+        "lever_L": 0.8590,
+        "lever_DX": 0.7476,
+        "lever_DY": 0.4222,
+    },
+    (3, 8.0): {
+        "U": 0.2076,
+        "R": 1.9920,
+        "strain_concrete": 3.500,
+        "strain_mild": 10.324,
+        "strain_prestressed": 12.465,
+        "kappa": 0.005229,
+        "compress_force": 3638.1,
+        "lever_L": 0.9478,
+        "lever_DX": 0.8627,
+        "lever_DY": 0.4323,
+    },
+    (4, 5.0): {
+        "U": 0.0953,
+        "R": 0.9802,
+        "strain_concrete": 3.500,
+        "strain_mild": 2.929,
+        "strain_prestressed": 6.998,
+        "kappa": 0.007745,
+        "compress_force": 4986.2,
+        "lever_L": 0.5444,
+        "lever_DX": 0.5244,
+        "lever_DY": 0.4561,
+    },
+    (4, 10.0): {
+        "U": 0.0657,
+        "R": 1.6327,
+        "strain_concrete": 3.500,
+        "strain_mild": 9.144,
+        "strain_prestressed": 11.161,
+        "kappa": 0.006482,
+        "compress_force": 4506.2,
+        "lever_L": 0.7358,
+        "lever_DX": 0.6762,
+        "lever_DY": 0.4505,
+    },
+    (4, 15.0): {
+        "U": 0.0301,
+        "R": 2.6422,
+        "strain_concrete": 3.500,
+        "strain_mild": 16.551,
+        "strain_prestressed": 16.003,
+        "kappa": 0.005153,
+        "compress_force": 4126.7,
+        "lever_L": 0.8462,
+        "lever_DX": 0.7810,
+        "lever_DY": 0.4440,
+    },
 }
