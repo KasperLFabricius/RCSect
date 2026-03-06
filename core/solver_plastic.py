@@ -46,26 +46,71 @@ class PlasticSolver:
         - N_calc is returned with the same compression-positive convention.
         - Prestress is internal and enters through prestressing initial strain eps0.
         """
-        self.poly_rot, self.rebar_mild_rot, self.rebar_pre_rot = self.cs.get_rotated_system(angle_v_deg)
+        candidates = self._solve_candidates(angle_v_deg, P_target)
+        if not candidates:
+            raise RuntimeError(
+                "Plastic solver failed to bracket neutral axis for "
+                f"P_target={P_target}, angle V={angle_v_deg} deg. "
+                "Check P sign convention (compression positive), or reduce |P_target|. "
+                "Attempts: concrete_controls/steel_controls"
+            )
+        if len(candidates) == 1:
+            return candidates[0]
 
-        default_eps0 = float(getattr(self.prestressed_steel, "initial_strain", 0.0) or 0.0) if self.prestressed_steel is not None else 0.0
-        self.prestrain_default = default_eps0 if np.isfinite(default_eps0) else 0.0
-        
-        minx, miny, maxx, maxy = self.poly_rot.bounds
-        self.y_top = maxy
-        self.y_bottom = miny
-        
-        y_steels = [bar['y'] for bar in self.rebar_mild_rot]
-        if self.rebar_pre_rot:
-            y_steels.extend([bar['y'] for bar in self.rebar_pre_rot])
-        
-        self.y_steel_min = min(y_steels) if y_steels else miny
-        
+        # Deterministic single-angle tie-breaker: choose lower absolute curvature.
+        best = min(candidates, key=lambda c: (abs(c['kappa']), c['pivot']))
+        return best
+
+    def solve_angle_sweep(self, angle_values_deg, P_target: float):
+        """
+        Solve a sequence of angles with deterministic branch continuity.
+
+        If multiple admissible candidates exist at an angle:
+        - first angle: choose candidate with smaller |kappa|
+        - subsequent angles: choose the candidate with minimum normalized
+          jump from the previously accepted angle.
+        """
+        results = []
+        prev = None
+        for angle in angle_values_deg:
+            candidates = self._solve_candidates(angle, P_target)
+            if not candidates:
+                raise RuntimeError(
+                    "Plastic solver failed to find admissible candidate for "
+                    f"P_target={P_target}, angle V={angle} deg"
+                )
+
+            if len(candidates) == 1:
+                chosen = candidates[0]
+            elif prev is None:
+                chosen = min(candidates, key=lambda c: (abs(c['kappa']), c['pivot']))
+            else:
+                scale_m = max(abs(prev['Mx']), abs(prev['My']), 1.0)
+                scale_y = max(self.y_top - self.y_bottom, 1e-3)
+                scale_k = max(abs(prev['kappa']), 1e-5)
+
+                def continuity_score(c):
+                    return (
+                        abs(c['Mx'] - prev['Mx']) / scale_m
+                        + abs(c['My'] - prev['My']) / scale_m
+                        + 0.5 * abs(c['y_na'] - prev['y_na']) / scale_y
+                        + 0.5 * abs(c['kappa'] - prev['kappa']) / scale_k
+                    )
+
+                chosen = min(candidates, key=lambda c: (continuity_score(c), c['pivot']))
+
+            results.append(chosen)
+            prev = chosen
+
+        return results
+
+    def _solve_candidates(self, angle_v_deg: float, P_target: float):
+        """Return all admissible plastic candidates for one (V, P_target) pair."""
+        self._prepare_rotated_state(angle_v_deg)
+
         height = self.y_top - self.y_bottom
-        attempted_pivots = []
         candidates = []
 
-        # Evaluate concrete-controlled candidate.
         y_min_conc = self.y_bottom - 0.5 * height
         y_max_conc = self.y_top + 2.0 * height
         conc_candidate = self._solve_pivot_candidate(
@@ -75,11 +120,8 @@ class PlasticSolver:
             y_max=y_max_conc,
         )
         if conc_candidate is not None:
-            candidates.append(conc_candidate)
-        else:
-            attempted_pivots.append("concrete_controls: no admissible root")
+            candidates.append(self._assemble_solution(angle_v_deg, conc_candidate))
 
-        # Evaluate steel-controlled candidate.
         y_min_steel = self.y_steel_min + 1e-4 * height
         y_max_steel = self.y_top + 2.0 * height
         steel_candidate = self._solve_pivot_candidate(
@@ -89,23 +131,29 @@ class PlasticSolver:
             y_max=y_max_steel,
         )
         if steel_candidate is not None:
-            candidates.append(steel_candidate)
-        else:
-            attempted_pivots.append("steel_controls: no admissible root")
+            candidates.append(self._assemble_solution(angle_v_deg, steel_candidate))
 
-        if not candidates:
-            raise RuntimeError(
-                "Plastic solver failed to bracket neutral axis for "
-                f"P_target={P_target}, angle V={angle_v_deg} deg. "
-                "Check P sign convention (compression positive), or reduce |P_target|. "
-                f"Attempts: {', '.join(attempted_pivots) if attempted_pivots else 'none'}"
-            )
+        return sorted(candidates, key=lambda c: c['pivot'])
 
-        best = min(candidates, key=lambda c: c['residual_abs'])
-        y_na_solution = best['y_na']
-        kappa = best['kappa']
-        pivot_type = best['pivot']
+    def _prepare_rotated_state(self, angle_v_deg: float):
+        self.poly_rot, self.rebar_mild_rot, self.rebar_pre_rot = self.cs.get_rotated_system(angle_v_deg)
 
+        default_eps0 = float(getattr(self.prestressed_steel, "initial_strain", 0.0) or 0.0) if self.prestressed_steel is not None else 0.0
+        self.prestrain_default = default_eps0 if np.isfinite(default_eps0) else 0.0
+
+        minx, miny, maxx, maxy = self.poly_rot.bounds
+        self.y_top = maxy
+        self.y_bottom = miny
+
+        y_steels = [bar['y'] for bar in self.rebar_mild_rot]
+        if self.rebar_pre_rot:
+            y_steels.extend([bar['y'] for bar in self.rebar_pre_rot])
+        self.y_steel_min = min(y_steels) if y_steels else miny
+
+    def _assemble_solution(self, angle_v_deg: float, candidate: dict) -> dict:
+        y_na_solution = candidate['y_na']
+        kappa = candidate['kappa']
+        pivot_type = candidate['pivot']
         forces_data = self._calculate_detailed_internal_forces(y_na_solution, kappa)
         
         # 1. Coordinate Transformations
@@ -159,6 +207,7 @@ class PlasticSolver:
             warning_flag = "W1"
 
         return {
+            "angle_v_deg": float(angle_v_deg),
             "y_na": y_na_solution,
             "kappa": kappa,
             "pivot": pivot_type,
@@ -174,7 +223,8 @@ class PlasticSolver:
             "lever_L": L,
             "lever_DX": DX_global,
             "lever_DY": DY_global,
-            "warning": warning_flag
+            "warning": warning_flag,
+            "residual_abs": candidate.get('residual_abs', abs(self._equilibrium_target(y_na_solution, candidate.get('P_target', 0.0), pivot_type))),
         }
 
     def _equilibrium_target(self, y_na: float, P_target: float, pivot: str) -> float:
@@ -228,6 +278,7 @@ class PlasticSolver:
             'pivot': pivot,
             'y_na': y_na,
             'kappa': kappa,
+            'P_target': P_target,
             'residual_abs': abs(residual),
         }
 
