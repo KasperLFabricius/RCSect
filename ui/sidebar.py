@@ -17,9 +17,37 @@ from utils.data_io import (
 )
 
 
-GEOMETRY_EDITOR_BASE_KEYS = ["editor_outline", "editor_mild", "editor_pre"]
-LOAD_CASE_EDITOR_KEYS = ["editor_load_cases_elastic", "editor_load_cases_plastic"]
+GEOMETRY_EDITOR_BASE_KEYS = ["editor_outline", "editor_mild_v2", "editor_pre_v2"]
+LOAD_CASE_EDITOR_KEYS = ["editor_load_cases_elastic_v2", "editor_load_cases_plastic_v2"]
 RUN_BUTTON_PRESSED_KEY = "run_analysis_pressed"
+
+
+def _prepare_editor_dataframe(
+    rows: list[dict],
+    expected_columns: list[str],
+    numeric_columns: list[str],
+    text_columns: list[str],
+) -> pd.DataFrame:
+    df = pd.DataFrame(rows or [], columns=expected_columns).copy()
+    for col in expected_columns:
+        if col not in df.columns:
+            df[col] = pd.NA
+    for col in numeric_columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    for col in text_columns:
+        df[col] = df[col].astype("string").fillna("")
+    return df[expected_columns]
+
+
+def _clean_text_series(series: pd.Series) -> pd.Series:
+    return series.astype("string").fillna("").str.strip()
+
+
+def _drop_blank_load_case_rows(df: pd.DataFrame, numeric_columns: list[str]) -> pd.DataFrame:
+    id_missing = df["id"].isna()
+    name_blank = _clean_text_series(df["name"]).eq("")
+    numeric_blank = df[numeric_columns].isna().all(axis=1)
+    return df.loc[~(id_missing & name_blank & numeric_blank)].copy()
 
 
 def _seed_widget(key, value):
@@ -419,40 +447,55 @@ def _render_geometry_inputs():
 
     st.write("**Mild Steel**")
     st.caption("Units: x, y in m; A in mm²")
-    df_mild = pd.DataFrame(geom.get("reinforcement_mild", []), columns=["id", "x", "y", "area"])
-    df_mild["id"] = pd.to_numeric(df_mild["id"], errors="coerce").astype("Int64")
-    for col in ["x", "y", "area"]:
-        df_mild[col] = pd.to_numeric(df_mild[col], errors="coerce")
-    df_mild["id"] = df_mild["id"].astype("string")
-    df_mild["id"] = df_mild["id"].fillna("")
+    df_mild = _prepare_editor_dataframe(
+        geom.get("reinforcement_mild", []),
+        expected_columns=["id", "x", "y", "area"],
+        numeric_columns=["x", "y", "area"],
+        text_columns=["id"],
+    )
     edited_mild = st.data_editor(
         df_mild,
         num_rows="dynamic",
         width="stretch",
-        key="editor_mild",
-        column_config={"x": "x [m]", "y": "y [m]", "area": "A [mm²]"},
+        key="editor_mild_v2",
+        column_config={
+            "id": st.column_config.TextColumn("id"),
+            "x": st.column_config.NumberColumn("x [m]"),
+            "y": st.column_config.NumberColumn("y [m]"),
+            "area": st.column_config.NumberColumn("A [mm²]"),
+        },
     )
     edited_mild["id"] = pd.to_numeric(edited_mild["id"], errors="coerce").astype("Int64")
+    for col in ["x", "y", "area"]:
+        edited_mild[col] = pd.to_numeric(edited_mild[col], errors="coerce")
     geom["reinforcement_mild"] = coerce_rebar_rows(edited_mild.to_dict("records"))
 
     st.write("**Prestressed Steel**")
     st.caption("Units: x, y in m; A in mm²; εp,0 in ‰")
-    df_pre = pd.DataFrame(geom.get("reinforcement_prestressed", []), columns=["id", "x", "y", "area", "eps0"])
-    df_pre["id"] = pd.to_numeric(df_pre["id"], errors="coerce").astype("Int64")
-    for col in ["x", "y", "area", "eps0"]:
-        df_pre[col] = pd.to_numeric(df_pre[col], errors="coerce")
+    df_pre = _prepare_editor_dataframe(
+        geom.get("reinforcement_prestressed", []),
+        expected_columns=["id", "x", "y", "area", "eps0"],
+        numeric_columns=["x", "y", "area", "eps0"],
+        text_columns=["id"],
+    )
     if not df_pre.empty and "eps0" in df_pre.columns:
         df_pre["eps0"] = df_pre["eps0"] * 1000.0
-    df_pre["id"] = df_pre["id"].astype("string")
-    df_pre["id"] = df_pre["id"].fillna("")
     edited_pre = st.data_editor(
         df_pre,
         num_rows="dynamic",
         width="stretch",
-        key="editor_pre",
-        column_config={"x": "x [m]", "y": "y [m]", "area": "A [mm²]", "eps0": "εp,0 [‰]"},
+        key="editor_pre_v2",
+        column_config={
+            "id": st.column_config.TextColumn("id"),
+            "x": st.column_config.NumberColumn("x [m]"),
+            "y": st.column_config.NumberColumn("y [m]"),
+            "area": st.column_config.NumberColumn("A [mm²]"),
+            "eps0": st.column_config.NumberColumn("εp,0 [‰]"),
+        },
     )
     edited_pre["id"] = pd.to_numeric(edited_pre["id"], errors="coerce").astype("Int64")
+    for col in ["x", "y", "area"]:
+        edited_pre[col] = pd.to_numeric(edited_pre[col], errors="coerce")
     if "eps0" in edited_pre.columns:
         edited_pre["eps0"] = pd.to_numeric(edited_pre["eps0"], errors="coerce") / 1000.0
     geom["reinforcement_prestressed"] = coerce_rebar_rows(edited_pre.to_dict("records"), include_eps0=True)
@@ -598,23 +641,37 @@ def _render_load_case_inputs():
     if mode in ["Elastic", "Both"]:
         st.write("**Elastic load cases**")
         st.caption("Units: P in kN, Mx/My in kNm, n as [-]")
-        df_elastic = pd.DataFrame(data["load_cases"].get("elastic", []), columns=elastic_columns)
-        df_elastic["id"] = pd.to_numeric(df_elastic["id"], errors="coerce").astype("Int64")
-        for col in ["P_l", "Mx_l", "My_l", "n_l", "P_s", "Mx_s", "My_s", "n_s"]:
-            df_elastic[col] = pd.to_numeric(df_elastic[col], errors="coerce")
-        df_elastic["id"] = df_elastic["id"].astype("string")
-        df_elastic["id"] = df_elastic["id"].fillna("")
+        elastic_numeric_cols = ["P_l", "Mx_l", "My_l", "n_l", "P_s", "Mx_s", "My_s", "n_s"]
+        df_elastic = _prepare_editor_dataframe(
+            data["load_cases"].get("elastic", []),
+            expected_columns=elastic_columns,
+            numeric_columns=elastic_numeric_cols,
+            text_columns=["id", "name"],
+        )
         edited_elastic = st.data_editor(
             df_elastic,
             num_rows="dynamic",
             width="stretch",
-            key="editor_load_cases_elastic",
+            key="editor_load_cases_elastic_v2",
             column_config={
-                "P_l": "P_l [kN]", "Mx_l": "Mx_l [kNm]", "My_l": "My_l [kNm]", "n_l": "n_l [-]",
-                "P_s": "P_s [kN]", "Mx_s": "Mx_s [kNm]", "My_s": "My_s [kNm]", "n_s": "n_s [-]",
+                "id": st.column_config.TextColumn("id"),
+                "name": st.column_config.TextColumn("name"),
+                "P_l": st.column_config.NumberColumn("P_l [kN]"),
+                "Mx_l": st.column_config.NumberColumn("Mx_l [kNm]"),
+                "My_l": st.column_config.NumberColumn("My_l [kNm]"),
+                "n_l": st.column_config.NumberColumn("n_l [-]"),
+                "P_s": st.column_config.NumberColumn("P_s [kN]"),
+                "Mx_s": st.column_config.NumberColumn("Mx_s [kNm]"),
+                "My_s": st.column_config.NumberColumn("My_s [kNm]"),
+                "n_s": st.column_config.NumberColumn("n_s [-]"),
             },
         )
         edited_elastic["id"] = pd.to_numeric(edited_elastic["id"], errors="coerce").astype("Int64")
+        edited_elastic["name"] = _clean_text_series(edited_elastic["name"])
+        edited_elastic.loc[edited_elastic["name"].eq(""), "name"] = None
+        for col in elastic_numeric_cols:
+            edited_elastic[col] = pd.to_numeric(edited_elastic[col], errors="coerce")
+        edited_elastic = _drop_blank_load_case_rows(edited_elastic, elastic_numeric_cols)
         data["load_cases"]["elastic"] = edited_elastic.to_dict("records")
 
         add_col, rm_col = st.columns(2)
@@ -647,20 +704,33 @@ def _render_load_case_inputs():
     if mode in ["Plastic", "Both"]:
         st.write("**Plastic load cases**")
         st.caption("Units: P in kN; V angles in deg")
-        df_plastic = pd.DataFrame(data["load_cases"].get("plastic", []), columns=plastic_columns)
-        df_plastic["id"] = pd.to_numeric(df_plastic["id"], errors="coerce").astype("Int64")
-        for col in ["P_target", "v_min", "v_max", "v_inc"]:
-            df_plastic[col] = pd.to_numeric(df_plastic[col], errors="coerce")
-        df_plastic["id"] = df_plastic["id"].astype("string")
-        df_plastic["id"] = df_plastic["id"].fillna("")
+        plastic_numeric_cols = ["P_target", "v_min", "v_max", "v_inc"]
+        df_plastic = _prepare_editor_dataframe(
+            data["load_cases"].get("plastic", []),
+            expected_columns=plastic_columns,
+            numeric_columns=plastic_numeric_cols,
+            text_columns=["id", "name"],
+        )
         edited_plastic = st.data_editor(
             df_plastic,
             num_rows="dynamic",
             width="stretch",
-            key="editor_load_cases_plastic",
-            column_config={"P_target": "P [kN]", "v_min": "V_min [deg]", "v_max": "V_max [deg]", "v_inc": "ΔV [deg]"},
+            key="editor_load_cases_plastic_v2",
+            column_config={
+                "id": st.column_config.TextColumn("id"),
+                "name": st.column_config.TextColumn("name"),
+                "P_target": st.column_config.NumberColumn("P [kN]"),
+                "v_min": st.column_config.NumberColumn("V_min [deg]"),
+                "v_max": st.column_config.NumberColumn("V_max [deg]"),
+                "v_inc": st.column_config.NumberColumn("ΔV [deg]"),
+            },
         )
         edited_plastic["id"] = pd.to_numeric(edited_plastic["id"], errors="coerce").astype("Int64")
+        edited_plastic["name"] = _clean_text_series(edited_plastic["name"])
+        edited_plastic.loc[edited_plastic["name"].eq(""), "name"] = None
+        for col in plastic_numeric_cols:
+            edited_plastic[col] = pd.to_numeric(edited_plastic[col], errors="coerce")
+        edited_plastic = _drop_blank_load_case_rows(edited_plastic, plastic_numeric_cols)
         data["load_cases"]["plastic"] = edited_plastic.to_dict("records")
 
         add_col, rm_col = st.columns(2)
