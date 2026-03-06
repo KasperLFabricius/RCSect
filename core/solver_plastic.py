@@ -256,6 +256,9 @@ class PlasticSolver:
         elif forces_data['compression_rebar_force'] > 0.5 * self.N_c_util:
             warning_flag = "W1"
 
+        full_design_concrete_force = float(self.N_c_util)
+        compression_rebar_force = float(forces_data['compression_rebar_force'])
+
         return {
             "angle_v_deg": float(angle_v_deg),
             "y_na": y_na_solution,
@@ -277,6 +280,8 @@ class PlasticSolver:
             "lever_DX": DX_global,
             "lever_DY": DY_global,
             "warning": warning_flag,
+            "compression_rebar_force": compression_rebar_force,
+            "full_design_concrete_force": full_design_concrete_force,
             "residual_abs": candidate.get('residual_abs', abs(self._equilibrium_target(y_na_solution, candidate.get('P_target', 0.0), pivot_type))),
         }
 

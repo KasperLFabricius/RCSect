@@ -9,11 +9,17 @@ import pandas as pd
 
 from tests.pcross_benchmark_fixture import (
     BENCHMARK_MAPPINGS,
+    EMBEDDED_BENCHMARK_CASES,
     LOAD_CASE_3,
     LOAD_CASE_4,
     MANUAL_ROWS,
     MANUAL_ROW_DIAGNOSTICS,
+    TYPE6_PRESTRESS_MAPPINGS,
     build_pcross_tbeam_solver,
+    build_strip_snit_a,
+    build_strip_snit_b,
+    build_strip_snit_c,
+    build_strip_snit_d,
 )
 
 DIAGNOSTIC_ROWS: tuple[tuple[int, float], ...] = (
@@ -195,6 +201,66 @@ def run_contribution_study() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     return pd.DataFrame(rows), pd.DataFrame(signed)
 
+
+
+def run_type6_prestress_mapping_study() -> pd.DataFrame:
+    """Benchmark-only type-6 mapping sensitivity study on Snit A-D."""
+    from tests.benchmark_compare import BenchmarkSweepSpec, run_benchmark_sweeps
+
+    families = [
+        ("snit_a", 101, EMBEDDED_BENCHMARK_CASES["snit_a"].load, build_strip_snit_a),
+        ("snit_b", 102, EMBEDDED_BENCHMARK_CASES["snit_b"].load, build_strip_snit_b),
+        ("snit_c", 103, EMBEDDED_BENCHMARK_CASES["snit_c"].load, build_strip_snit_c),
+        ("snit_d", 104, EMBEDDED_BENCHMARK_CASES["snit_d"].load, build_strip_snit_d),
+    ]
+
+    rows = []
+    for mapping_name in TYPE6_PRESTRESS_MAPPINGS:
+        for family, load_case, load, builder in families:
+            df = run_benchmark_sweeps(
+                builder(type6_mapping=mapping_name),
+                [BenchmarkSweepSpec(load_case=load_case, p_target=load.P_target, angles_deg=load.angles_deg)],
+                reference_rows=EMBEDDED_BENCHMARK_CASES[family].reference_rows,
+            )
+            refs = df[df["Mx_ref"].notna()]
+            rows.append(
+                {
+                    "mapping": mapping_name,
+                    "family": family,
+                    "max_rel_err_Mx": float(refs["rel_err_Mx"].max()),
+                    "max_rel_err_My": float(refs["rel_err_My"].max()),
+                    "max_rel_err_strain_prestressed": float(refs["rel_err_strain_prestressed"].max()),
+                    "max_rel_err_compress_force": float(refs["rel_err_compress_force"].max()),
+                    "max_rel_err_kappa": float(refs["rel_err_kappa"].max()),
+                }
+            )
+
+    out = pd.DataFrame(rows).sort_values(["family", "mapping"]).reset_index(drop=True)
+    baseline = out[out["mapping"] == "baseline"].set_index("family")
+    refined = out[out["mapping"] == "refined"].set_index("family")
+    if not baseline.empty and not refined.empty:
+        deltas = (
+            refined[[
+                "max_rel_err_Mx",
+                "max_rel_err_My",
+                "max_rel_err_strain_prestressed",
+                "max_rel_err_compress_force",
+                "max_rel_err_kappa",
+            ]]
+            - baseline[[
+                "max_rel_err_Mx",
+                "max_rel_err_My",
+                "max_rel_err_strain_prestressed",
+                "max_rel_err_compress_force",
+                "max_rel_err_kappa",
+            ]]
+        )
+        out = out.merge(
+            deltas.add_prefix("delta_refined_minus_baseline_").reset_index(),
+            on="family",
+            how="left",
+        )
+    return out
 
 def diagnostics_markdown(df: pd.DataFrame) -> str:
     cols = [

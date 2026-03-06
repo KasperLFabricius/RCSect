@@ -39,8 +39,8 @@ def test_prestress_strip_rows_track_signed_moments_and_prestress_strain():
         refs = _run_case(key)
         refs = refs[refs["Mx_ref"].notna()]
         # Signed Mx/My is primary metric; values are tightly aligned in these rows.
-        assert refs["rel_err_Mx"].max() < 0.03
-        assert refs["abs_err_My"].max() < 80.0
+        assert refs["rel_err_Mx"].max() < 0.02
+        assert refs["abs_err_My"].max() < 45.0
 
         # Prestressed strain is compared where available.
         with_pre_ref = refs[refs["strain_prestressed_ref"].notna()]
@@ -69,8 +69,9 @@ def test_annular_rows_track_intermediate_outputs_and_warnings_diagnostic():
         assert (((refs.loc[dx_mask, "DX_calc"].abs() - refs.loc[dx_mask, "DX_ref"].abs()).abs()) / refs.loc[dx_mask, "DX_ref"].abs()).max() < 0.35
         assert (((refs.loc[dy_mask, "DY_calc"].abs() - refs.loc[dy_mask, "DY_ref"].abs()).abs()) / refs.loc[dy_mask, "DY_ref"].abs()).max() < 0.35
 
-        # Warning parity remains diagnostic-only: rows do carry expected benchmark flags.
+        # Warning parity is now computed from force diagnostics (W1/W2 intent).
         assert refs["warning_ref"].notna().all()
+        assert refs["warning_est_match"].all()
 
 
 def _build_annular_solver(outer, inner, bars, area):

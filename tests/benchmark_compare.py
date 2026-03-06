@@ -10,6 +10,7 @@ import pandas as pd
 from tests.pcross_benchmark_fixture import MANUAL_ROWS
 
 TINY_REF = 1e-12
+AXIS_TOL = 1e-6
 
 
 @dataclass(frozen=True)
@@ -19,8 +20,8 @@ class BenchmarkSweepSpec:
     angles_deg: tuple[float, ...]
 
 
-def _quadrant(mx: float, my: float) -> str:
-    if mx == 0.0 or my == 0.0:
+def _quadrant(mx: float, my: float, tol: float = AXIS_TOL) -> str:
+    if abs(mx) <= tol or abs(my) <= tol:
         return "axis"
     if mx > 0.0 and my > 0.0:
         return "I"
@@ -39,10 +40,52 @@ def _trend_sign(values: list[float]) -> list[int]:
     return out
 
 
-def _safe_sign_agreement(calc: float, ref: float | None) -> bool | float:
+def _safe_sign_agreement(calc: float, ref: float | None, axis_tol: float = AXIS_TOL) -> bool | float:
     if ref is None or not np.isfinite(ref):
         return np.nan
+    if abs(ref) <= axis_tol:
+        return np.nan
     return bool(np.sign(calc) == np.sign(ref))
+
+
+def estimate_warning_level(
+    compression_rebar_force: float,
+    full_design_concrete_force: float | None = None,
+    total_compression_force: float | None = None,
+) -> str | None:
+    """Diagnostic warning estimate aligned with benchmark W1/W2 intent.
+
+    Primary estimate uses currently solved internal forces:
+    concrete_design_force_est ~= total_compression - compression_rebar_force.
+    Fallback uses full_design_concrete_force if total compression is unavailable.
+    """
+    if not np.isfinite(compression_rebar_force):
+        return None
+
+    concrete_force_est = np.nan
+    if total_compression_force is not None and np.isfinite(total_compression_force):
+        concrete_force_est = float(total_compression_force) - float(compression_rebar_force)
+
+    if np.isfinite(concrete_force_est) and concrete_force_est > 0.0:
+        if compression_rebar_force > concrete_force_est:
+            return "W2"
+        if compression_rebar_force > 0.5 * concrete_force_est:
+            return "W1"
+        return None
+
+    if full_design_concrete_force is None or not np.isfinite(full_design_concrete_force):
+        return None
+    if compression_rebar_force > full_design_concrete_force:
+        return "W2"
+    if compression_rebar_force > 0.5 * full_design_concrete_force:
+        return "W1"
+    return None
+
+
+def _ref_to_solver_units(key: str, value: float) -> float:
+    if key in {"strain_concrete", "strain_mild", "strain_prestressed"} and abs(value) <= 1.0:
+        return value * 10.0
+    return value
 
 
 def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec], reference_rows: dict[tuple[int, float], dict] | None = None) -> pd.DataFrame:
@@ -68,6 +111,15 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec], referenc
 
             quadrant_calc = _quadrant(calc_mx, calc_my)
             quadrant_expected = _quadrant(ref_mx, ref_my) if ref else np.nan
+            quadrant_agreement = np.nan
+            if ref and abs(ref_mx) > AXIS_TOL and abs(ref_my) > AXIS_TOL:
+                quadrant_agreement = quadrant_calc == quadrant_expected
+
+            warning_calc_est = estimate_warning_level(
+                compression_rebar_force=float(row.get("compression_rebar_force", np.nan)),
+                full_design_concrete_force=float(row.get("full_design_concrete_force", np.nan)),
+                total_compression_force=float(row.get("compress_force", np.nan)),
+            )
 
             rows.append(
                 {
@@ -86,7 +138,7 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec], referenc
                     "sign_agreement_My": _safe_sign_agreement(calc_my, ref_my),
                     "quadrant_calc": quadrant_calc,
                     "quadrant_expected": quadrant_expected,
-                    "quadrant_agreement": (quadrant_calc == quadrant_expected) if ref else np.nan,
+                    "quadrant_agreement": quadrant_agreement,
                     "candidate_count": int(row.get("candidate_count", 1)),
                     "selected_candidate_index": row.get("selected_candidate_index"),
                     "pivot": row.get("pivot"),
@@ -97,10 +149,14 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec], referenc
                     "strain_prestressed_calc": float(row.get("strain_prestressed", np.nan)) if row.get("strain_prestressed") is not None else np.nan,
                     "kappa_calc": float(row.get("kappa", np.nan)),
                     "compress_force_calc": float(row.get("compress_force", np.nan)),
+                    "compression_rebar_force_calc": float(row.get("compression_rebar_force", np.nan)),
+                    "full_design_concrete_force_calc": float(row.get("full_design_concrete_force", np.nan)),
                     "L_calc": float(row.get("lever_L", np.nan)),
                     "DX_calc": float(row.get("lever_DX", np.nan)),
                     "DY_calc": float(row.get("lever_DY", np.nan)),
                     "warning_calc": row.get("warning"),
+                    "warning_calc_est": warning_calc_est,
+                    "y_na_calc": float(row.get("y_na", np.nan)),
                     "strain_concrete_ref": float(ref.get("strain_concrete", np.nan)) if ref else np.nan,
                     "strain_mild_ref": float(ref.get("strain_mild", np.nan)) if ref else np.nan,
                     "strain_prestressed_ref": float(ref.get("strain_prestressed", np.nan)) if ref and ref.get("strain_prestressed") is not None else np.nan,
@@ -109,6 +165,9 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec], referenc
                     "L_ref": float(ref.get("L", np.nan)) if ref else np.nan,
                     "DX_ref": float(ref.get("DX", np.nan)) if ref else np.nan,
                     "DY_ref": float(ref.get("DY", np.nan)) if ref else np.nan,
+                    "U_ref": float(ref.get("U", np.nan)) if ref else np.nan,
+                    "y_na_ref": float(ref.get("U", np.nan)) if ref else np.nan,
+                    "R_ref": float(ref.get("R", np.nan)) if ref else np.nan,
                     "warning_ref": (ref.get("warning") if ref else None),
                     "note_ref": (ref.get("note") if ref else None),
                 }
@@ -119,14 +178,16 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec], referenc
     has_ref = df["Mx_ref"].notna() & df["My_ref"].notna()
     df["abs_err_Mx"] = np.where(has_ref, np.abs(df["Mx_calc"] - df["Mx_ref"]), np.nan)
     df["abs_err_My"] = np.where(has_ref, np.abs(df["My_calc"] - df["My_ref"]), np.nan)
-    for key in ["strain_concrete", "strain_mild", "strain_prestressed", "kappa", "compress_force", "L", "DX", "DY"]:
+    for key in ["strain_concrete", "strain_mild", "strain_prestressed", "kappa", "compress_force", "L", "DX", "DY", "y_na"]:
         ref_col = f"{key}_ref"
         calc_col = f"{key}_calc"
         if ref_col in df.columns and calc_col in df.columns:
-            df[f"abs_err_{key}"] = np.where(df[ref_col].notna(), np.abs(df[calc_col] - df[ref_col]), np.nan)
-            mask = df[ref_col].notna() & (np.abs(df[ref_col]) > 1e-9)
-            df[f"rel_err_{key}"] = np.where(mask, df[f"abs_err_{key}"] / np.maximum(np.abs(df[ref_col]), TINY_REF), np.nan)
+            scaled_ref = df[ref_col].map(lambda v: _ref_to_solver_units(key, float(v)) if np.isfinite(v) else np.nan)
+            df[f"abs_err_{key}"] = np.where(scaled_ref.notna(), np.abs(df[calc_col] - scaled_ref), np.nan)
+            mask = scaled_ref.notna() & (np.abs(scaled_ref) > 1e-9)
+            df[f"rel_err_{key}"] = np.where(mask, df[f"abs_err_{key}"] / np.maximum(np.abs(scaled_ref), TINY_REF), np.nan)
     df["warning_match"] = np.where(df["warning_ref"].notna(), df["warning_ref"] == df["warning_calc"], np.nan)
+    df["warning_est_match"] = np.where(df["warning_ref"].notna(), df["warning_ref"] == df["warning_calc_est"], np.nan)
     mx_rel_mask = has_ref & (np.abs(df["Mx_ref"]) > 1e-9)
     my_rel_mask = has_ref & (np.abs(df["My_ref"]) > 1e-9)
     df["rel_err_Mx"] = np.where(mx_rel_mask, df["abs_err_Mx"] / np.maximum(np.abs(df["Mx_ref"]), TINY_REF), np.nan)
@@ -168,6 +229,7 @@ def summarize_benchmark(df: pd.DataFrame) -> pd.DataFrame:
                 "all_sign_ok_Mx": bool(with_ref["sign_agreement_Mx"].all()) if not with_ref.empty else np.nan,
                 "all_sign_ok_My": bool(with_ref["sign_agreement_My"].all()) if not with_ref.empty else np.nan,
                 "max_candidate_count": int(group["candidate_count"].max()),
+                "warning_match_rate": float(with_ref["warning_est_match"].mean()) if "warning_est_match" in with_ref.columns else np.nan,
             }
         )
     return pd.DataFrame(summaries).sort_values("load_case").reset_index(drop=True)
