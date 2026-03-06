@@ -72,6 +72,9 @@ def test_solver_result_schema_with_prestressed_bars():
         "lever_DY",
         "warning",
         "pivot",
+        "candidate_count",
+        "selected_candidate_index",
+        "selection_source",
     }
     assert expected_keys.issubset(result.keys())
     assert result["strain_prestressed"] is not None
@@ -93,6 +96,9 @@ def test_solver_result_schema_without_prestressed_bars():
         "lever_DY",
         "warning",
         "pivot",
+        "candidate_count",
+        "selected_candidate_index",
+        "selection_source",
     }
     assert expected_keys.issubset(result.keys())
     assert result["strain_prestressed"] is None
@@ -145,6 +151,9 @@ def test_prepare_plastic_results_tables_adds_schema_and_export_columns():
         "lever_DY_m",
         "warning",
         "pivot",
+        "candidate_count",
+        "selected_candidate_index",
+        "selection_source",
     }
     assert expected_export_cols.issubset(export_df.columns)
     assert export_df.loc[0, "strain_prestressed_permille"] is None

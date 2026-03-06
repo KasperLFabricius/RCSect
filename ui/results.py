@@ -54,6 +54,9 @@ def prepare_plastic_results_tables(
         "lever_DY",
         "warning",
         "pivot",
+        "candidate_count",
+        "selected_candidate_index",
+        "selection_source",
     ]:
         if col not in df_display.columns:
             df_display[col] = None
@@ -97,6 +100,9 @@ def prepare_plastic_results_tables(
         "lever_DY_m",
         "warning",
         "pivot",
+        "candidate_count",
+        "selected_candidate_index",
+        "selection_source",
     ]
     for col in ordered_cols:
         if col not in df_export.columns:
