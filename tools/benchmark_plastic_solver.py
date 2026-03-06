@@ -15,6 +15,7 @@ from tests.pcross_benchmark_fixture import (
 )
 from tests.plastic_diagnostics import (
     choose_semantic_winners,
+    choose_semantic_winners_by_family,
     classify_dominant_mismatch,
     diagnose_manual_rows,
     diagnostics_markdown,
@@ -156,6 +157,45 @@ def _semantic_gap_table(before_detail, after_detail):
         })
     return pd.DataFrame(rows)
 
+
+def _ambiguous_output_conclusion(
+    semantics_summary,
+    cross_family_winners: dict[str, str],
+    family_winners,
+    baseline_detail,
+    aligned_detail,
+):
+    import pandas as pd
+
+    rows = []
+    for output, col in [("strain_prestressed", "rel_err_strain_prestressed"), ("lever_DY", "rel_err_DY")]:
+        cross = cross_family_winners.get(output)
+        fam_rows = family_winners[family_winners["output"] == output] if not family_winners.empty else pd.DataFrame()
+        unique_fam = sorted(fam_rows["candidate"].unique().tolist()) if not fam_rows.empty else []
+        baseline_max = float(baseline_detail[col].dropna().max()) if col in baseline_detail.columns and baseline_detail[col].notna().any() else None
+        aligned_max = float(aligned_detail[col].dropna().max()) if col in aligned_detail.columns and aligned_detail[col].notna().any() else None
+
+        if cross:
+            status = "cross-family winner exists"
+        elif len(unique_fam) >= 2:
+            status = "family-specific winners only"
+        elif len(unique_fam) == 1:
+            status = "single-family signal only"
+        else:
+            status = "no candidate materially improves fit"
+
+        rows.append(
+            {
+                "output": output,
+                "cross_family_winner": cross,
+                "family_winners": ", ".join(unique_fam) if unique_fam else None,
+                "status": status,
+                "max_rel_error_reported": baseline_max,
+                "max_rel_error_semantic_aligned": aligned_max,
+            }
+        )
+    return pd.DataFrame(rows)
+
 def main() -> None:
     out_dir = Path("artifacts") / "benchmark"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -202,8 +242,10 @@ def main() -> None:
     type6_study = run_type6_prestress_mapping_study()
     semantics_detail, semantics_summary = run_output_semantics_study()
     semantic_winners = choose_semantic_winners(semantics_summary)
+    family_winners = choose_semantic_winners_by_family(semantics_summary)
     grouped_readiness = _output_group_summary(detail_aligned)
     semantic_gap = _semantic_gap_table(detail, detail_aligned)
+    ambiguous_conclusion = _ambiguous_output_conclusion(semantics_summary, semantic_winners, family_winners, detail, detail_aligned)
     conclusion = classify_dominant_mismatch(row_diag)
 
     detail_csv = out_dir / "plastic_benchmark_detail.csv"
@@ -215,7 +257,9 @@ def main() -> None:
     type6_study_csv = out_dir / "plastic_type6_mapping_study.csv"
     grouped_readiness_csv = out_dir / "plastic_sub1_readiness.csv"
     semantics_detail_csv = out_dir / "plastic_output_semantics_study.csv"
+    semantics_family_csv = out_dir / "plastic_output_semantics_family_study.csv"
     semantics_summary_md = out_dir / "plastic_output_semantics_summary.md"
+    semantics_family_md = out_dir / "plastic_output_semantics_family_summary.md"
 
     detail.to_csv(detail_csv, index=False)
     summary.to_csv(summary_csv, index=False)
@@ -225,6 +269,7 @@ def main() -> None:
     type6_study.to_csv(type6_study_csv, index=False)
     grouped_readiness.to_csv(grouped_readiness_csv, index=False)
     semantics_detail.to_csv(semantics_detail_csv, index=False)
+    family_winners.to_csv(semantics_family_csv, index=False)
 
     referenced = detail[detail["Mx_ref"].notna()][
         [
@@ -274,6 +319,8 @@ def main() -> None:
         md += f"- {k}: `{v}`\n"
     md += "\n\n## Semantic gap (before vs semantic-aligned benchmark comparison)\n\n"
     md += _markdown_table(semantic_gap)
+    md += "\n\n## Semantic-versus-constitutive conclusion for unresolved outputs\n\n"
+    md += _markdown_table(ambiguous_conclusion)
     md += "\n\n## Sub-1% readiness by fixture family and output group (after semantic alignment)\n\n"
     md += _markdown_table(grouped_readiness)
     md += "\n\nConclusion: " + conclusion + "\n"
@@ -303,7 +350,12 @@ def main() -> None:
             sem_md += f"- {k}: `{v}`\n"
     else:
         sem_md += "No consistent winner across families.\n"
+    sem_md += "\n\n## Family-specific winners for unresolved outputs\n\n"
+    sem_md += _markdown_table(family_winners)
+    sem_md += "\n\n## Semantic-versus-constitutive conclusion\n\n"
+    sem_md += _markdown_table(ambiguous_conclusion)
     semantics_summary_md.write_text(sem_md, encoding="utf-8")
+    semantics_family_md.write_text(_markdown_table(ambiguous_conclusion), encoding="utf-8")
 
     print(f"Wrote {detail_csv}")
     print(f"Wrote {summary_csv}")
@@ -315,7 +367,9 @@ def main() -> None:
     print(f"Wrote {type6_study_csv}")
     print(f"Wrote {grouped_readiness_csv}")
     print(f"Wrote {semantics_detail_csv}")
+    print(f"Wrote {semantics_family_csv}")
     print(f"Wrote {semantics_summary_md}")
+    print(f"Wrote {semantics_family_md}")
 
 
 if __name__ == "__main__":

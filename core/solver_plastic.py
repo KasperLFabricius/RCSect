@@ -422,7 +422,8 @@ class PlasticSolver:
         if self.prestressed_steel:
             for bar in self.rebar_pre_rot:
                 geometric_eps = kappa * (y_na - bar['y'])
-                total_eps = geometric_eps + _effective_prestress_eps0(bar, self.prestrain_default)
+                eps0_eff = _effective_prestress_eps0(bar, self.prestrain_default)
+                total_eps = geometric_eps + eps0_eff
                 sigma = self.prestressed_steel.stress(total_eps)
                 force = _bar_force_kN(sigma, bar['area'])
                 
@@ -447,7 +448,11 @@ class PlasticSolver:
                         'id': bar.get('id'),
                         'x': float(bar['x']),
                         'y': float(bar['y']),
+                        'strain_geometric': float(geometric_eps),
+                        'strain_eps0': float(eps0_eff),
+                        'strain_incremental': float(geometric_eps),
                         'strain_total': float(total_eps),
+                        'strain_stress_equivalent': float(sigma / self.prestressed_steel.E_p) if self.prestressed_steel.E_p else float('nan'),
                         'stress_mpa': float(sigma),
                         'force_kN': float(force),
                     }
@@ -516,6 +521,8 @@ class PlasticSolver:
             'prestressed_bar_details': prestressed_bar_rows,
             'mild_strains_total_permille': [float(r['strain_total'] * 1000.0) for r in mild_bar_rows],
             'prestressed_strains_total_permille': [float(r['strain_total'] * 1000.0) for r in prestressed_bar_rows],
+            'prestressed_strains_incremental_permille': [float(r['strain_incremental'] * 1000.0) for r in prestressed_bar_rows],
+            'prestressed_strains_stress_equivalent_permille': [float(r['strain_stress_equivalent'] * 1000.0) for r in prestressed_bar_rows],
             'mild_stresses_mpa': [float(r['stress_mpa']) for r in mild_bar_rows],
             'prestressed_stresses_mpa': [float(r['stress_mpa']) for r in prestressed_bar_rows],
             'mild_forces_kN': [float(r['force_kN']) for r in mild_bar_rows],
