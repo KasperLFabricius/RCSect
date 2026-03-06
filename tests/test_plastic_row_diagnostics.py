@@ -4,6 +4,7 @@ from tests.plastic_diagnostics import (
     classify_dominant_mismatch,
     diagnose_manual_rows,
     run_contribution_study,
+    run_type6_prestress_mapping_study,
 )
 
 
@@ -133,3 +134,23 @@ def test_extended_annular_diagnostics_intermediate_columns_present():
         ]:
             assert col in refs.columns
             assert refs[col].notna().any()
+
+
+def test_type6_mapping_study_reports_before_after_metrics_for_snit_ad():
+    study = run_type6_prestress_mapping_study()
+
+    assert set(study["mapping"]) == {"baseline", "refined"}
+    assert set(study["family"]) == {"snit_a", "snit_b", "snit_c", "snit_d"}
+    for col in [
+        "max_rel_err_Mx",
+        "max_rel_err_My",
+        "max_rel_err_strain_prestressed",
+        "max_rel_err_compress_force",
+        "max_rel_err_kappa",
+    ]:
+        assert study[col].notna().all()
+
+    # Refined mapping is benchmark-only and should remain narrow: no dramatic regressions.
+    refined = study[study["mapping"] == "refined"]
+    assert (refined["delta_refined_minus_baseline_max_rel_err_Mx"] < 0.02).all()
+    assert (refined["delta_refined_minus_baseline_max_rel_err_My"] < 0.02).all()

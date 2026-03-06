@@ -178,11 +178,38 @@ def _build_mild_pair():
     return [{"id": f"S{i+1}", "x": x, "y": y, "area": a} for i, (x, y, a) in enumerate(pts)]
 
 
+
+
+@dataclass(frozen=True)
+class Type6PrestressMapping:
+    name: str
+    gamma_E: float
+    gamma_u: float
+
+
+TYPE6_PRESTRESS_MAPPINGS: dict[str, Type6PrestressMapping] = {
+    "baseline": Type6PrestressMapping(name="baseline", gamma_E=0.97, gamma_u=1.12),
+    "refined": Type6PrestressMapping(name="refined", gamma_E=1.02, gamma_u=1.05),
+}
+
+DEFAULT_TYPE6_PRESTRESS_MAPPING = "baseline"
+
+
+def resolve_type6_mapping(mapping: str | Type6PrestressMapping | None) -> Type6PrestressMapping:
+    if mapping is None:
+        return TYPE6_PRESTRESS_MAPPINGS[DEFAULT_TYPE6_PRESTRESS_MAPPING]
+    if isinstance(mapping, Type6PrestressMapping):
+        return mapping
+    if mapping not in TYPE6_PRESTRESS_MAPPINGS:
+        raise ValueError(f"Unknown type-6 mapping '{mapping}'")
+    return TYPE6_PRESTRESS_MAPPINGS[mapping]
+
 def _build_pre_bars(points):
     return [{"id": f"P{i+1}", "x": x, "y": y, "area": a, "eps0": 0.0059} for i, (x, y, a) in enumerate(points)]
 
 
-def _build_strip_solver(pre_points, p_target):
+def _build_strip_solver(pre_points, p_target, type6_mapping: str | Type6PrestressMapping | None = None):
+    mapping = resolve_type6_mapping(type6_mapping)
     cs = CrossSection(
         concrete_outline=_cw_strip_outline(),
         concrete_voids=[],
@@ -200,8 +227,8 @@ def _build_strip_solver(pre_points, p_target):
             f_uk=550.0,
             include_hardening=True,
             gamma_s=1.12,
-            gamma_u=1.12,
-            gamma_E=0.97,
+            gamma_u=mapping.gamma_u,
+            gamma_E=mapping.gamma_E,
         ),
         prestressed_steel=PrestressedSteel(
             f_p01k=1550.0,
@@ -209,28 +236,28 @@ def _build_strip_solver(pre_points, p_target):
             e_uk=0.035,
             E_p=200000.0,
             gamma_s=1.12,
-            gamma_u=1.12,
-            gamma_E=0.97,
+            gamma_u=mapping.gamma_u,
+            gamma_E=mapping.gamma_E,
             initial_strain=0.0,
         ),
     )
     return solver
 
 
-def build_strip_snit_a() -> PlasticSolver:
-    return _build_strip_solver([(0.000, 0.430, 8928.00)], p_target=6016.0)
+def build_strip_snit_a(type6_mapping: str | Type6PrestressMapping | None = None) -> PlasticSolver:
+    return _build_strip_solver([(0.000, 0.430, 8928.00)], p_target=6016.0, type6_mapping=type6_mapping)
 
 
-def build_strip_snit_b() -> PlasticSolver:
-    return _build_strip_solver([(0.000, -0.411, 8928.00)], p_target=7207.0)
+def build_strip_snit_b(type6_mapping: str | Type6PrestressMapping | None = None) -> PlasticSolver:
+    return _build_strip_solver([(0.000, -0.411, 8928.00)], p_target=7207.0, type6_mapping=type6_mapping)
 
 
-def build_strip_snit_c() -> PlasticSolver:
-    return _build_strip_solver([(0.000, -0.411, 6696.00), (0.000, 0.078, 2232.00)], p_target=7229.5)
+def build_strip_snit_c(type6_mapping: str | Type6PrestressMapping | None = None) -> PlasticSolver:
+    return _build_strip_solver([(0.000, -0.411, 6696.00), (0.000, 0.078, 2232.00)], p_target=7229.5, type6_mapping=type6_mapping)
 
 
-def build_strip_snit_d() -> PlasticSolver:
-    return _build_strip_solver([(0.000, 0.108, 6696.00), (0.000, 0.377, 2232.00)], p_target=7229.5)
+def build_strip_snit_d(type6_mapping: str | Type6PrestressMapping | None = None) -> PlasticSolver:
+    return _build_strip_solver([(0.000, 0.108, 6696.00), (0.000, 0.377, 2232.00)], p_target=7229.5, type6_mapping=type6_mapping)
 
 
 def _ring(points):
