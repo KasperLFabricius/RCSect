@@ -18,6 +18,18 @@ def _effective_prestress_eps0(bar: dict, default_eps0: float) -> float:
     return eps0_f if np.isfinite(eps0_f) else default_eps0
 
 
+def _bar_force_kN(sigma_mpa: float, area_mm2: float) -> float:
+    """Convert bar stress/area to axial force in kN.
+
+    Dimensional chain:
+    - stress: MPa == N/mm²
+    - area: mm²
+    - sigma * area -> N
+    - N / 1000 -> kN
+    """
+    return float(sigma_mpa) * float(area_mm2) * 1e-3
+
+
 class PlasticSolver:
     """
     Calculates the ultimate flexural capacity of a cross section 
@@ -349,11 +361,18 @@ class PlasticSolver:
         sum_x_comp, sum_y_comp = 0.0, 0.0
         sum_x_tens, sum_y_tens = 0.0, 0.0
 
+        # Internal force basis in this routine:
+        # - stresses: MPa (N/mm²)
+        # - bar areas: mm²
+        # - geometry coordinates: m
+        # - assembled axial forces: kN
+        # - assembled moments: kNm
+
         # --- MILD STEEL ---
         for bar in self.rebar_mild_rot:
             eps = kappa * (y_na - bar['y']) # Tension is positive
             sigma = self.mild_steel.stress(eps)
-            force = sigma * bar['area'] * 1e-6 
+            force = _bar_force_kN(sigma, bar['area'])
             
             N_tot += force
             Mx_rot += force * bar['y']
@@ -376,7 +395,7 @@ class PlasticSolver:
                 geometric_eps = kappa * (y_na - bar['y'])
                 total_eps = geometric_eps + _effective_prestress_eps0(bar, self.prestrain_default)
                 sigma = self.prestressed_steel.stress(total_eps)
-                force = sigma * bar['area'] * 1e-6
+                force = _bar_force_kN(sigma, bar['area'])
                 
                 N_tot += force
                 Mx_rot += force * bar['y']
@@ -400,6 +419,8 @@ class PlasticSolver:
         if poly_rect is not None and not poly_rect.is_empty:
             area = poly_rect.area
             centroid = poly_rect.centroid
+            # f_cd[MPa]=N/mm², area[m²]=1e6 mm² -> force[N]=f_cd*area*1e6,
+            # then N/1000 gives kN, so factor is 1e3.
             force = -(self.concrete.f_cd * area * 1000.0) # Negative for compression
             abs_f = abs(force)
             
