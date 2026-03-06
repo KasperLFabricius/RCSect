@@ -74,6 +74,17 @@ def render_geometry_exports(geometry: dict):
 
 
 def render_elastic_results(elastic_output: dict):
+    def _fmt_na_intercept(value):
+        if value is None:
+            return "N/A"
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return "N/A"
+        if not np.isfinite(value):
+            return "N/A"
+        return f"{value:.4f}"
+
     max_c_mpa = kn_m2_to_mpa(elastic_output.get("max_concrete", 0.0))
     max_tension = 0.0
     if elastic_output.get("RST_total"):
@@ -109,6 +120,19 @@ def render_elastic_results(elastic_output: dict):
     else:
         st.info("No reinforcement data available.")
 
+    st.markdown("#### Neutral-axis intersections [m]")
+    na_rows = []
+    for state_key, label in (("na_LONG", "LONG"), ("na_RST1", "RST1")):
+        na_data = elastic_output.get(state_key, {}) or {}
+        na_rows.append(
+            {
+                "State": label,
+                "x-intercept [m]": _fmt_na_intercept(na_data.get("x_intercept")),
+                "y-intercept [m]": _fmt_na_intercept(na_data.get("y_intercept")),
+            }
+        )
+    st.dataframe(pd.DataFrame(na_rows), width="stretch", hide_index=True)
+
 
 def render_elastic_export(case_name: str, elastic_output: dict, data: dict | None = None):
     safe_label, safe_slug = _normalize_case_name(case_name)
@@ -126,8 +150,19 @@ def render_elastic_export(case_name: str, elastic_output: dict, data: dict | Non
     max_c = kn_m2_to_mpa(elastic_output.get("max_concrete", 0.0))
     rows.append({"metric": "sigma_c_max_MPa", "item": "", "value": max_c})
 
+    na_long = elastic_output.get("na_LONG", {}) or {}
+    na_rst1 = elastic_output.get("na_RST1", {}) or {}
+    rows.extend(
+        [
+            {"metric": "na_intersection", "item": "long_x_intercept_m", "value": na_long.get("x_intercept")},
+            {"metric": "na_intersection", "item": "long_y_intercept_m", "value": na_long.get("y_intercept")},
+            {"metric": "na_intersection", "item": "rst1_x_intercept_m", "value": na_rst1.get("x_intercept")},
+            {"metric": "na_intersection", "item": "rst1_y_intercept_m", "value": na_rst1.get("y_intercept")},
+        ]
+    )
+
     for key, value in elastic_output.items():
-        if key == "max_concrete":
+        if key in {"max_concrete", "na_LONG", "na_RST1"}:
             continue
         if isinstance(value, dict):
             for sub_key, sub_val in value.items():
