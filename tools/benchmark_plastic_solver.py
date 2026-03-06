@@ -5,8 +5,19 @@ from __future__ import annotations
 from pathlib import Path
 
 from tests.benchmark_compare import BenchmarkSweepSpec, run_benchmark_sweeps, summarize_benchmark
-from tests.pcross_benchmark_fixture import LOAD_CASE_3, LOAD_CASE_4, build_pcross_tbeam_solver
-from tests.plastic_diagnostics import classify_dominant_mismatch, diagnose_manual_rows, diagnostics_markdown
+from tests.pcross_benchmark_fixture import (
+    BENCHMARK_MAPPINGS,
+    DEFAULT_BENCHMARK_MAPPING,
+    LOAD_CASE_3,
+    LOAD_CASE_4,
+    build_pcross_tbeam_solver,
+)
+from tests.plastic_diagnostics import (
+    classify_dominant_mismatch,
+    diagnose_manual_rows,
+    diagnostics_markdown,
+    run_contribution_study,
+)
 
 
 def _markdown_table(df):
@@ -21,8 +32,6 @@ def _markdown_table(df):
             vals.append("" if v is None else str(v))
         lines.append("| " + " | ".join(vals) + " |")
     return "\n".join(lines)
-
-
 
 
 def _prior_summary_if_available(summary_csv: Path):
@@ -59,10 +68,12 @@ def _max_rel_errors(df):
         return (None, None)
     return (float(df["max_rel_err_Mx"].max()), float(df["max_rel_err_My"].max()))
 
+
 def main() -> None:
     out_dir = Path("artifacts") / "benchmark"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    active_mapping = BENCHMARK_MAPPINGS[DEFAULT_BENCHMARK_MAPPING]
     solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
     specs = [
         BenchmarkSweepSpec(load_case=3, p_target=LOAD_CASE_3.P_target, angles_deg=LOAD_CASE_3.angles_deg),
@@ -73,17 +84,22 @@ def main() -> None:
 
     detail = run_benchmark_sweeps(solver, specs)
     summary = summarize_benchmark(detail)
-    row_diag = diagnose_manual_rows()
+    row_diag = diagnose_manual_rows(mapping=DEFAULT_BENCHMARK_MAPPING)
+    contribution_summary, contribution_signed = run_contribution_study()
     conclusion = classify_dominant_mismatch(row_diag)
 
     detail_csv = out_dir / "plastic_benchmark_detail.csv"
     summary_md = out_dir / "plastic_benchmark_summary.md"
     row_diag_csv = out_dir / "plastic_row_diagnostics.csv"
     row_diag_md = out_dir / "plastic_row_diagnostics.md"
+    contribution_csv = out_dir / "plastic_benchmark_contribution_summary.csv"
+    contribution_signed_csv = out_dir / "plastic_benchmark_contribution_signed_errors.csv"
 
     detail.to_csv(detail_csv, index=False)
     summary.to_csv(summary_csv, index=False)
     row_diag.to_csv(row_diag_csv, index=False)
+    contribution_summary.to_csv(contribution_csv, index=False)
+    contribution_signed.to_csv(contribution_signed_csv, index=False)
 
     referenced = detail[detail["Mx_ref"].notna()][
         [
@@ -109,11 +125,22 @@ def main() -> None:
     ]
 
     md = "# Plastic Solver Benchmark Summary\n\n"
+    md += "## Active benchmark mapping\n\n"
+    md += (
+        f"- mapping: `{active_mapping.name}`\n"
+        f"- gamma_c: {active_mapping.gamma_c}\n"
+        f"- gamma_s: {active_mapping.gamma_s}\n"
+        f"- gamma_p: {active_mapping.gamma_p}\n"
+        f"- gamma_E: {active_mapping.gamma_E}\n"
+        f"- gamma_u: {active_mapping.gamma_u}\n\n"
+    )
     md += _markdown_table(summary)
     md += "\n\n## Referenced rows\n\n"
     md += "Signed errors (abs/rel) are primary benchmark metrics. "
     md += "Magnitude-only errors remain in CSV as secondary diagnostics.\n\n"
     md += _markdown_table(referenced)
+    md += "\n\n## Contribution study (cases A-D)\n\n"
+    md += _markdown_table(contribution_summary)
     md += "\n\nConclusion: " + conclusion + "\n"
 
     prior_mx, prior_my = _max_rel_errors(prior_summary)
@@ -128,6 +155,7 @@ def main() -> None:
         md += f"- prior max_rel_err_My: {prior_my:.6f}\n"
         md += f"- current max_rel_err_My: {cur_my:.6f}\n"
         md += f"- delta max_rel_err_My: {cur_my - prior_my:+.6f}\n"
+
     summary_md.write_text(md, encoding="utf-8")
     row_diag_md.write_text(diagnostics_markdown(row_diag), encoding="utf-8")
 
@@ -136,6 +164,8 @@ def main() -> None:
     print(f"Wrote {summary_md}")
     print(f"Wrote {row_diag_csv}")
     print(f"Wrote {row_diag_md}")
+    print(f"Wrote {contribution_csv}")
+    print(f"Wrote {contribution_signed_csv}")
 
 
 if __name__ == "__main__":

@@ -54,7 +54,9 @@ class MildSteel:
         f_yk: float,
         gamma_s: float = 1.20,
         E_s: float = 200000.0,
+        gamma_E: float = 1.0,
         e_uk: float = 0.02,
+        gamma_u: float = 1.0,
         f_uk: float = None,
         include_hardening: bool = False,
         f_yk_t: float = None,
@@ -64,18 +66,20 @@ class MildSteel:
         self.f_yk_t = f_yk if f_yk_t is None else f_yk_t
         self.f_yk_c = f_yk if f_yk_c is None else f_yk_c
         self.gamma_s = gamma_s
-        self.E_s = E_s
+        self.gamma_E = gamma_E
+        self.gamma_u = gamma_u
+        self.E_s = E_s / self.gamma_E
         self.f_yd_t = self.f_yk_t / self.gamma_s
         self.f_yd_c = self.f_yk_c / self.gamma_s
         self.eps_yd_t = self.f_yd_t / self.E_s
         self.eps_yd_c = self.f_yd_c / self.E_s
-        self.eps_ud = 0.9 * e_uk  # Design ultimate strain limit per EC2
+        self.eps_ud = 0.9 * e_uk / self.gamma_u  # Optional benchmark mapping for gamma_u
 
         self.include_hardening = include_hardening
         if self.include_hardening and f_uk is not None:
             self.k = f_uk / f_yk
-            self.f_ud_t = (self.k * self.f_yk_t) / self.gamma_s
-            self.f_ud_c = (self.k * self.f_yk_c) / self.gamma_s
+            self.f_ud_t = (self.k * self.f_yk_t) / (self.gamma_s * self.gamma_u)
+            self.f_ud_c = (self.k * self.f_yk_c) / (self.gamma_s * self.gamma_u)
         else:
             self.f_ud_t = self.f_yd_t
             self.f_ud_c = self.f_yd_c
@@ -123,19 +127,21 @@ class PrestressedSteel:
     The solver is responsible for assembling total bar strain, including any
     prestress initial strain offsets.
     """
-    def __init__(self, f_p01k: float, f_pk: float, e_uk: float, gamma_s: float = 1.20, E_p: float = 195000.0, initial_strain: float = 0.0):
+    def __init__(self, f_p01k: float, f_pk: float, e_uk: float, gamma_s: float = 1.20, E_p: float = 195000.0, initial_strain: float = 0.0, gamma_E: float = 1.0, gamma_u: float = 1.0):
         self.f_p01k = f_p01k
         self.f_pk = f_pk
         # Backward-compatibility only: solver now applies per-bar initial strain.
         self.initial_strain = initial_strain
         self.gamma_s = gamma_s
-        self.E_p = E_p
+        self.gamma_E = gamma_E
+        self.gamma_u = gamma_u
+        self.E_p = E_p / self.gamma_E
         
         self.f_pd = self.f_p01k / self.gamma_s
         self.eps_pd = self.f_pd / self.E_p
         
         # Design ultimate strain limit per EC2 (typically 0.9 * characteristic limit)
-        self.eps_ud = 0.9 * e_uk
+        self.eps_ud = 0.9 * e_uk / self.gamma_u
         
     def stress(self, total_eps: np.ndarray) -> np.ndarray:
         """

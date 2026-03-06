@@ -4,11 +4,18 @@ from core.geometry import CrossSection
 from core.materials import Concrete, MildSteel
 from core.solver_plastic import PlasticSolver
 from tests.benchmark_compare import BenchmarkSweepSpec, run_benchmark_sweeps
-from tests.pcross_benchmark_fixture import LOAD_CASE_3, LOAD_CASE_4, MANUAL_ROWS, build_pcross_tbeam_solver
+from tests.pcross_benchmark_fixture import (
+    BENCHMARK_MAPPINGS,
+    DEFAULT_BENCHMARK_MAPPING,
+    LOAD_CASE_3,
+    LOAD_CASE_4,
+    MANUAL_ROWS,
+    build_pcross_tbeam_solver,
+)
 
 
-def _detailed_benchmark_df():
-    solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
+def _detailed_benchmark_df(mapping=DEFAULT_BENCHMARK_MAPPING):
+    solver = build_pcross_tbeam_solver(prestress_eps0=0.004, mapping=mapping)
     specs = [
         BenchmarkSweepSpec(load_case=3, p_target=LOAD_CASE_3.P_target, angles_deg=LOAD_CASE_3.angles_deg),
         BenchmarkSweepSpec(load_case=4, p_target=LOAD_CASE_4.P_target, angles_deg=LOAD_CASE_4.angles_deg),
@@ -16,6 +23,19 @@ def _detailed_benchmark_df():
     return run_benchmark_sweeps(solver, specs)
 
 
+
+
+def test_manual_benchmark_mapping_factors_are_applied_in_fixture():
+    mapping = BENCHMARK_MAPPINGS[DEFAULT_BENCHMARK_MAPPING]
+    solver = build_pcross_tbeam_solver(prestress_eps0=0.004, mapping=DEFAULT_BENCHMARK_MAPPING)
+
+    assert np.isclose(solver.concrete.gamma_c, 1.90)
+    assert np.isclose(solver.mild_steel.gamma_s, 1.50)
+    assert np.isclose(solver.prestressed_steel.gamma_s, 1.50)
+    assert np.isclose(solver.mild_steel.gamma_E, mapping.gamma_E)
+    assert np.isclose(solver.prestressed_steel.gamma_E, mapping.gamma_E)
+    assert np.isclose(solver.mild_steel.gamma_u, mapping.gamma_u)
+    assert np.isclose(solver.prestressed_steel.gamma_u, mapping.gamma_u)
 def test_external_axial_force_materially_changes_plastic_solution_exact_fixture():
     solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
     res_p1000 = solver.solve(angle_v_deg=10.0, P_target=1000.0)
@@ -72,13 +92,13 @@ def test_benchmark_reference_rows_match_with_explicit_error_tolerances():
     assert refs["quadrant_agreement"].all()
 
     # Tightened signed-error tolerances vs previous loose plausibility gates.
-    assert refs["rel_err_Mx"].max() <= 0.51
-    assert refs["rel_err_My"].max() <= 0.29
+    assert refs["rel_err_Mx"].max() <= 0.46
+    assert refs["rel_err_My"].max() <= 0.33
 
     # LC4 now governs Mx residual; keep a dedicated cap to catch regressions.
     lc4_refs = refs[refs["load_case"] == 4]
-    assert lc4_refs["rel_err_Mx"].max() <= 0.51
-    assert lc4_refs["rel_err_My"].max() <= 0.29
+    assert lc4_refs["rel_err_Mx"].max() <= 0.46
+    assert lc4_refs["rel_err_My"].max() <= 0.33
 
 
 def test_sweep_has_branch_continuity_and_no_obvious_branch_flips():
