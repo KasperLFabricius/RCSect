@@ -29,6 +29,78 @@ def _normalize_case_name(case_name) -> tuple[str, str]:
 
     return display_name, slug
 
+def prepare_plastic_results_dataframe(plastic_output: list, target_P: float | None = None) -> pd.DataFrame:
+    """Normalize plastic solver output for display/export tables."""
+    df_plastic = pd.DataFrame(plastic_output or [])
+    if df_plastic.empty:
+        return df_plastic
+
+    for col in [
+        "Mx",
+        "My",
+        "V",
+        "y_na",
+        "kappa",
+        "na_intersect_x",
+        "na_intersect_y",
+        "strain_concrete",
+        "strain_mild",
+        "strain_prestressed",
+        "compress_force",
+        "lever_L",
+        "lever_DX",
+        "lever_DY",
+        "warning",
+        "pivot",
+    ]:
+        if col not in df_plastic.columns:
+            df_plastic[col] = None
+
+    denom = target_P if target_P not in (None, 0) else np.nan
+    df_plastic["R (m)"] = np.sqrt(df_plastic["Mx"] ** 2 + df_plastic["My"] ** 2) / denom
+    df_plastic["U (deg)"] = np.degrees(np.arctan2(df_plastic["Mx"], df_plastic["My"]))
+
+    export_rename = {
+        "Mx": "Mx_kNm",
+        "My": "My_kNm",
+        "V": "V_deg",
+        "y_na": "y_na_m",
+        "kappa": "kappa_1_per_m",
+        "na_intersect_x": "na_intersect_x_m",
+        "na_intersect_y": "na_intersect_y_m",
+        "strain_concrete": "strain_concrete_permille",
+        "strain_mild": "strain_mild_permille",
+        "strain_prestressed": "strain_prestressed_permille",
+        "compress_force": "compress_force_kN",
+        "lever_L": "lever_L_m",
+        "lever_DX": "lever_DX_m",
+        "lever_DY": "lever_DY_m",
+    }
+    df_export = df_plastic.rename(columns=export_rename)
+    ordered_cols = [
+        "Mx_kNm",
+        "My_kNm",
+        "V_deg",
+        "y_na_m",
+        "kappa_1_per_m",
+        "na_intersect_x_m",
+        "na_intersect_y_m",
+        "strain_concrete_permille",
+        "strain_mild_permille",
+        "strain_prestressed_permille",
+        "compress_force_kN",
+        "lever_L_m",
+        "lever_DX_m",
+        "lever_DY_m",
+        "warning",
+        "pivot",
+    ]
+    for col in ordered_cols:
+        if col not in df_export.columns:
+            df_export[col] = None
+    df_plastic.attrs["export_df"] = df_export[ordered_cols].copy()
+    return df_plastic
+
 
 def render_geometry_exports(geometry: dict):
     st.markdown("#### Exports")
@@ -190,10 +262,31 @@ def render_plastic_results(plastic_output: list, target_P: float):
         st.warning("No plastic calculation data generated.")
         return
 
-    df_plastic = pd.DataFrame(plastic_output)
-    df_plastic["R (m)"] = np.sqrt(df_plastic["Mx"] ** 2 + df_plastic["My"] ** 2) / target_P
-    df_plastic["U (deg)"] = np.degrees(np.arctan2(df_plastic["Mx"], df_plastic["My"]))
-    display_cols = [c for c in ["U (deg)", "R (m)", "Mx", "My", "V", "y_na", "kappa", "strain_concrete", "strain_mild", "pivot"] if c in df_plastic.columns]
+    df_plastic = prepare_plastic_results_dataframe(plastic_output, target_P=target_P)
+    display_cols = [
+        c
+        for c in [
+            "U (deg)",
+            "R (m)",
+            "Mx",
+            "My",
+            "V",
+            "y_na",
+            "kappa",
+            "na_intersect_x",
+            "na_intersect_y",
+            "strain_concrete",
+            "strain_mild",
+            "strain_prestressed",
+            "compress_force",
+            "lever_L",
+            "lever_DX",
+            "lever_DY",
+            "warning",
+            "pivot",
+        ]
+        if c in df_plastic.columns
+    ]
     df_display = df_plastic[display_cols].copy()
 
     df_display.rename(
@@ -203,8 +296,16 @@ def render_plastic_results(plastic_output: list, target_P: float):
             "V": "V [deg]",
             "y_na": "Depth y_na [m]",
             "kappa": "Curvature [1/m]",
+            "na_intersect_x": "NA x-intercept [m]",
+            "na_intersect_y": "NA y-intercept [m]",
             "strain_concrete": "ε_c [‰]",
             "strain_mild": "ε_s [‰]",
+            "strain_prestressed": "ε_p [‰]",
+            "compress_force": "Compression force [kN]",
+            "lever_L": "Lever arm L [m]",
+            "lever_DX": "Lever arm DX [m]",
+            "lever_DY": "Lever arm DY [m]",
+            "warning": "Warning",
             "pivot": "Failure pivot",
         },
         inplace=True,
@@ -258,19 +359,25 @@ def render_plastic_results(plastic_output: list, target_P: float):
                 "V [deg]": "{:.1f}",
                 "Depth y_na [m]": "{:.3f}",
                 "Curvature [1/m]": "{:.6f}",
+                "NA x-intercept [m]": "{:.4f}",
+                "NA y-intercept [m]": "{:.4f}",
                 "ε_c [‰]": "{:.2f}",
                 "ε_s [‰]": "{:.2f}",
-            }
+                "ε_p [‰]": "{:.2f}",
+                "Compression force [kN]": "{:.2f}",
+                "Lever arm L [m]": "{:.4f}",
+                "Lever arm DX [m]": "{:.4f}",
+                "Lever arm DY [m]": "{:.4f}",
+            },
+            na_rep="N/A",
         ),
         width="stretch",
         height=400,
     )
 
-
 def render_plastic_export(case_name: str, plastic_output: list, data: dict | None = None):
     safe_label, safe_slug = _normalize_case_name(case_name)
-    df_plastic = pd.DataFrame(plastic_output)
-    df_plastic = df_plastic.rename(columns={"Mx": "Mx_kNm", "My": "My_kNm", "V": "V_deg", "y_na": "y_na_m", "kappa": "kappa_1_per_m"})
+    df_plastic = prepare_plastic_results_dataframe(plastic_output).attrs.get("export_df", pd.DataFrame())
     settings = (data or {}).get("analysis_settings", {})
     mild = ((data or {}).get("materials", {})).get("mild_steel", {})
     meta_df = pd.DataFrame(

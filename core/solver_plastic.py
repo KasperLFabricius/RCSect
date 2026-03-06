@@ -124,6 +124,19 @@ class PlasticSolver:
         max_mild_strain = 0.0
         if self.rebar_mild_rot:
             max_mild_strain = max([kappa * (y_na_solution - bar['y']) for bar in self.rebar_mild_rot]) * 1000.0
+        max_prestressed_strain = None
+        if self.rebar_pre_rot:
+            # Keep the same reporting convention as strain_mild: report the maximum
+            # signed total strain among bars (tension-positive), in permille.
+            max_prestressed_strain = (
+                max(
+                    [
+                        kappa * (y_na_solution - bar['y']) + _effective_prestress_eps0(bar, self.prestrain_default)
+                        for bar in self.rebar_pre_rot
+                    ]
+                )
+                * 1000.0
+            )
 
         # [cite_start]4. Lever Arm Calculations [cite: 762, 763, 773, 784]
         c_comp = forces_data['centroid_compression']
@@ -154,6 +167,7 @@ class PlasticSolver:
             "na_intersect_y": intersection_y,
             "strain_concrete": max_concrete_strain,
             "strain_mild": max_mild_strain,
+            "strain_prestressed": max_prestressed_strain,
             "compress_force": forces_data['total_compression'],
             "lever_L": L,
             "lever_DX": DX_global,
