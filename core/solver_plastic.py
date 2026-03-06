@@ -38,29 +38,54 @@ class PlasticSolver:
         
         self.y_steel_min = min(y_steels) if y_steels else miny
         
-        try:
-            y_na_solution = brentq(
-                self._equilibrium_target, 
-                a=self.y_steel_min - 0.1, 
-                b=self.y_top + 10.0, 
-                args=(P_target, 'concrete_controls')
+        height = self.y_top - self.y_bottom
+        attempted_pivots = []
+        y_na_solution = None
+        pivot_type = None
+        kappa = None
+
+        # Try concrete-controlled failure first unless it implies steel rupture.
+        y_min_conc = self.y_bottom - 0.5 * height
+        y_max_conc = self.y_top + 2.0 * height
+        bracket = self._find_bracket(P_target, 'concrete_controls', y_min_conc, y_max_conc)
+        if bracket is not None:
+            try:
+                candidate_y = brentq(self._equilibrium_target, bracket[0], bracket[1], args=(P_target, 'concrete_controls'))
+                candidate_kappa = self.concrete.eps_cu2 / (self.y_top - candidate_y)
+                eps_s_max = candidate_kappa * (candidate_y - self.y_steel_min)
+                if eps_s_max > self.mild_steel.eps_ud:
+                    attempted_pivots.append("concrete_controls: steel rupture")
+                else:
+                    y_na_solution = candidate_y
+                    kappa = candidate_kappa
+                    pivot_type = 'concrete_controls'
+            except ValueError:
+                attempted_pivots.append("concrete_controls: brentq failure")
+        else:
+            attempted_pivots.append("concrete_controls: no bracket")
+
+        # Fall back to steel-controlled failure if needed.
+        if y_na_solution is None:
+            y_min_steel = self.y_steel_min + 1e-4 * height
+            y_max_steel = self.y_top + 2.0 * height
+            bracket = self._find_bracket(P_target, 'steel_controls', y_min_steel, y_max_steel)
+            if bracket is not None:
+                try:
+                    y_na_solution = brentq(self._equilibrium_target, bracket[0], bracket[1], args=(P_target, 'steel_controls'))
+                    pivot_type = 'steel_controls'
+                    kappa = self.mild_steel.eps_ud / (y_na_solution - self.y_steel_min)
+                except ValueError:
+                    attempted_pivots.append("steel_controls: brentq failure")
+            else:
+                attempted_pivots.append("steel_controls: no bracket")
+
+        if y_na_solution is None:
+            raise RuntimeError(
+                "Plastic solver failed to bracket neutral axis for "
+                f"P_target={P_target}, angle V={angle_v_deg} deg. "
+                "Check P sign convention (compression positive), or reduce |P_target|. "
+                f"Attempts: {', '.join(attempted_pivots) if attempted_pivots else 'none'}"
             )
-            pivot_type = 'concrete_controls'
-            kappa = self.concrete.eps_cu2 / (self.y_top - y_na_solution)
-            
-            eps_s_max = kappa * (y_na_solution - self.y_steel_min)
-            if eps_s_max > self.mild_steel.eps_ud:
-                raise ValueError("Steel ruptured before concrete crushed.")
-                
-        except ValueError:
-            y_na_solution = brentq(
-                self._equilibrium_target, 
-                a=self.y_steel_min + 0.001, 
-                b=self.y_top + 10.0, 
-                args=(P_target, 'steel_controls')
-            )
-            pivot_type = 'steel_controls'
-            kappa = self.mild_steel.eps_ud / (y_na_solution - self.y_steel_min)
 
         forces_data = self._calculate_detailed_internal_forces(y_na_solution, kappa)
         
@@ -104,7 +129,7 @@ class PlasticSolver:
             "y_na": y_na_solution,
             "kappa": kappa,
             "pivot": pivot_type,
-            "N_calc": forces_data['N_tot'],
+            "N_calc": -forces_data['N_tot'],
             "Mx": Mx_global,
             "My": My_global,
             "na_intersect_x": intersection_x,
@@ -119,13 +144,31 @@ class PlasticSolver:
         }
 
     def _equilibrium_target(self, y_na: float, P_target: float, pivot: str) -> float:
+        if abs(self.y_top - y_na) < 1e-9:
+            return np.nan
+
         if pivot == 'concrete_controls':
             kappa = self.concrete.eps_cu2 / (self.y_top - y_na)
         else:
             kappa = self.mild_steel.eps_ud / (y_na - self.y_steel_min)
             
         forces = self._calculate_detailed_internal_forces(y_na, kappa)
-        return forces['N_tot'] - P_target
+        N_comp = -forces['N_tot']
+        return N_comp - P_target
+
+    def _find_bracket(self, P_target, pivot, y_min, y_max, n=80):
+        y_values = np.linspace(y_min, y_max, n)
+        f_values = [self._equilibrium_target(y, P_target, pivot) for y in y_values]
+
+        for i in range(len(y_values) - 1):
+            f_i = f_values[i]
+            f_j = f_values[i + 1]
+            if not np.isfinite(f_i) or not np.isfinite(f_j):
+                continue
+            if f_i * f_j < 0.0:
+                return y_values[i], y_values[i + 1]
+
+        return None
 
     def _calculate_detailed_internal_forces(self, y_na: float, kappa: float):
         N_tot = 0.0
@@ -258,6 +301,10 @@ class PlasticSolver:
 
         def integrate_triangle(triangle: Polygon):
             nonlocal I0, Ix, Iy
+            if len(triangle.interiors) > 0:
+                integrate_geom(triangle)
+                return
+
             coords = list(triangle.exterior.coords)[:-1]
             if len(coords) != 3:
                 integrate_geom(triangle)
@@ -295,14 +342,13 @@ class PlasticSolver:
 
             if isinstance(geom, Polygon):
                 coords = list(geom.exterior.coords)[:-1]
-                if len(coords) == 3:
+                if len(coords) == 3 and len(geom.interiors) == 0:
                     integrate_triangle(geom)
                     return
 
                 for tri in triangulate(geom):
                     tri_clip = tri.intersection(geom)
                     integrate_geom(tri_clip)
-                return
 
             for sub_geom in getattr(geom, "geoms", []):
                 integrate_geom(sub_geom)

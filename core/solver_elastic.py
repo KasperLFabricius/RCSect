@@ -348,11 +348,11 @@ class ElasticSolver:
             ], dtype=float)
 
         x0 = self._initial_guess(P_target, Mx_target, My_target)
-        sol = root(residual, x0, method="lm", options={"maxfev": 2000})
+        sol = root(residual, x0, method="lm", options={"maxiter": 2000})
 
         if not sol.success:
             x1 = np.array([x0[0], 5.0 * x0[1], 5.0 * x0[2]], dtype=float)
-            sol = root(residual, x1, method="lm", options={"maxfev": 2000})
+            sol = root(residual, x1, method="lm", options={"maxiter": 2000})
 
         if not sol.success:
             res_norm = float(np.linalg.norm(residual(sol.x)))
