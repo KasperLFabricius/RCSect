@@ -8,6 +8,7 @@ from tests.benchmark_compare import BenchmarkSweepSpec, run_benchmark_sweeps, su
 from tests.pcross_benchmark_fixture import (
     BENCHMARK_MAPPINGS,
     DEFAULT_BENCHMARK_MAPPING,
+    EMBEDDED_BENCHMARK_CASES,
     LOAD_CASE_3,
     LOAD_CASE_4,
     build_pcross_tbeam_solver,
@@ -82,7 +83,19 @@ def main() -> None:
     summary_csv = out_dir / "plastic_benchmark_summary.csv"
     prior_summary = _prior_summary_if_available(summary_csv)
 
-    detail = run_benchmark_sweeps(solver, specs)
+    detail_frames = [run_benchmark_sweeps(solver, specs)]
+    for key in ["snit_a", "snit_b", "snit_c", "snit_d", "section0", "sectioniv"]:
+        case = EMBEDDED_BENCHMARK_CASES[key]
+        detail_frames.append(
+            run_benchmark_sweeps(
+                case.solver_builder(),
+                [BenchmarkSweepSpec(load_case=case.load_case, p_target=case.load.P_target, angles_deg=case.load.angles_deg)],
+                reference_rows=case.reference_rows,
+            )
+        )
+
+    import pandas as pd
+    detail = pd.concat(detail_frames, ignore_index=True)
     summary = summarize_benchmark(detail)
     row_diag = diagnose_manual_rows(mapping=DEFAULT_BENCHMARK_MAPPING)
     contribution_summary, contribution_signed = run_contribution_study()

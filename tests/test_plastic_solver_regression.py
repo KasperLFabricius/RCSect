@@ -11,6 +11,7 @@ from tests.pcross_benchmark_fixture import (
     LOAD_CASE_4,
     MANUAL_ROWS,
     build_pcross_tbeam_solver,
+    EMBEDDED_BENCHMARK_CASES,
 )
 
 
@@ -223,3 +224,16 @@ def test_candidate_multiplicity_is_visible_for_known_dual_root_case():
     assert picked["candidate_count"] == 2
     assert picked["selected_candidate_index"] in (0, 1)
     assert picked["pivot"] in {c["pivot"] for c in raw}
+
+
+def test_extended_fixture_sweeps_have_signed_moment_coverage():
+    for key in ["snit_a", "snit_b", "snit_c", "snit_d", "section0", "sectioniv"]:
+        case = EMBEDDED_BENCHMARK_CASES[key]
+        df = run_benchmark_sweeps(
+            case.solver_builder(),
+            [BenchmarkSweepSpec(case.load_case, case.load.P_target, case.load.angles_deg)],
+            reference_rows=case.reference_rows,
+        )
+        refs = df[df["Mx_ref"].notna()]
+        assert not refs.empty
+        assert refs[refs["Mx_ref"].abs() > 1e-9]["sign_agreement_Mx"].all()

@@ -45,8 +45,9 @@ def _safe_sign_agreement(calc: float, ref: float | None) -> bool | float:
     return bool(np.sign(calc) == np.sign(ref))
 
 
-def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec]) -> pd.DataFrame:
+def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec], reference_rows: dict[tuple[int, float], dict] | None = None) -> pd.DataFrame:
     """Run solver sweeps and return one normalized DataFrame row per angle."""
+    refs = MANUAL_ROWS if reference_rows is None else reference_rows
     rows: list[dict] = []
     for spec in sweep_specs:
         solved = solver.solve_angle_sweep(spec.angles_deg, spec.p_target)
@@ -55,7 +56,7 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec]) -> pd.Da
         for angle in spec.angles_deg:
             a = float(angle)
             row = by_angle[a]
-            ref = MANUAL_ROWS.get((spec.load_case, a), None)
+            ref = refs.get((spec.load_case, a), None)
             ref_mx = float(ref["Mx"]) if ref else np.nan
             ref_my = float(ref["My"]) if ref else np.nan
             calc_mx = float(row["Mx"])
@@ -91,6 +92,25 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec]) -> pd.Da
                     "pivot": row.get("pivot"),
                     "selected_branch": row.get("selection_source"),
                     "residual_abs": float(row.get("residual_abs", np.nan)),
+                    "strain_concrete_calc": float(row.get("strain_concrete", np.nan)),
+                    "strain_mild_calc": float(row.get("strain_mild", np.nan)),
+                    "strain_prestressed_calc": float(row.get("strain_prestressed", np.nan)) if row.get("strain_prestressed") is not None else np.nan,
+                    "kappa_calc": float(row.get("kappa", np.nan)),
+                    "compress_force_calc": float(row.get("compress_force", np.nan)),
+                    "L_calc": float(row.get("lever_L", np.nan)),
+                    "DX_calc": float(row.get("lever_DX", np.nan)),
+                    "DY_calc": float(row.get("lever_DY", np.nan)),
+                    "warning_calc": row.get("warning"),
+                    "strain_concrete_ref": float(ref.get("strain_concrete", np.nan)) if ref else np.nan,
+                    "strain_mild_ref": float(ref.get("strain_mild", np.nan)) if ref else np.nan,
+                    "strain_prestressed_ref": float(ref.get("strain_prestressed", np.nan)) if ref and ref.get("strain_prestressed") is not None else np.nan,
+                    "kappa_ref": float(ref.get("kappa", np.nan)) if ref else np.nan,
+                    "compress_force_ref": float(ref.get("compress_force", np.nan)) if ref else np.nan,
+                    "L_ref": float(ref.get("L", np.nan)) if ref else np.nan,
+                    "DX_ref": float(ref.get("DX", np.nan)) if ref else np.nan,
+                    "DY_ref": float(ref.get("DY", np.nan)) if ref else np.nan,
+                    "warning_ref": (ref.get("warning") if ref else None),
+                    "note_ref": (ref.get("note") if ref else None),
                 }
             )
 
@@ -99,8 +119,18 @@ def run_benchmark_sweeps(solver, sweep_specs: list[BenchmarkSweepSpec]) -> pd.Da
     has_ref = df["Mx_ref"].notna() & df["My_ref"].notna()
     df["abs_err_Mx"] = np.where(has_ref, np.abs(df["Mx_calc"] - df["Mx_ref"]), np.nan)
     df["abs_err_My"] = np.where(has_ref, np.abs(df["My_calc"] - df["My_ref"]), np.nan)
-    df["rel_err_Mx"] = np.where(has_ref, df["abs_err_Mx"] / np.maximum(np.abs(df["Mx_ref"]), TINY_REF), np.nan)
-    df["rel_err_My"] = np.where(has_ref, df["abs_err_My"] / np.maximum(np.abs(df["My_ref"]), TINY_REF), np.nan)
+    for key in ["strain_concrete", "strain_mild", "strain_prestressed", "kappa", "compress_force", "L", "DX", "DY"]:
+        ref_col = f"{key}_ref"
+        calc_col = f"{key}_calc"
+        if ref_col in df.columns and calc_col in df.columns:
+            df[f"abs_err_{key}"] = np.where(df[ref_col].notna(), np.abs(df[calc_col] - df[ref_col]), np.nan)
+            mask = df[ref_col].notna() & (np.abs(df[ref_col]) > 1e-9)
+            df[f"rel_err_{key}"] = np.where(mask, df[f"abs_err_{key}"] / np.maximum(np.abs(df[ref_col]), TINY_REF), np.nan)
+    df["warning_match"] = np.where(df["warning_ref"].notna(), df["warning_ref"] == df["warning_calc"], np.nan)
+    mx_rel_mask = has_ref & (np.abs(df["Mx_ref"]) > 1e-9)
+    my_rel_mask = has_ref & (np.abs(df["My_ref"]) > 1e-9)
+    df["rel_err_Mx"] = np.where(mx_rel_mask, df["abs_err_Mx"] / np.maximum(np.abs(df["Mx_ref"]), TINY_REF), np.nan)
+    df["rel_err_My"] = np.where(my_rel_mask, df["abs_err_My"] / np.maximum(np.abs(df["My_ref"]), TINY_REF), np.nan)
 
     # Secondary diagnostic-only magnitude errors.
     df["abs_mag_err_Mx"] = np.where(has_ref, np.abs(df["Mx_calc_abs"] - df["Mx_ref_abs"]), np.nan)
