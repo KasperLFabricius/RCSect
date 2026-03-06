@@ -55,11 +55,19 @@ class PlasticSolver:
                 "Attempts: concrete_controls/steel_controls"
             )
         if len(candidates) == 1:
-            return candidates[0]
+            return self._with_selection_diagnostics(
+                selected=candidates[0],
+                candidates=candidates,
+                selection_source='single_unique',
+            )
 
         # Deterministic single-angle tie-breaker: choose lower absolute curvature.
         best = min(candidates, key=lambda c: (abs(c['kappa']), c['pivot']))
-        return best
+        return self._with_selection_diagnostics(
+            selected=best,
+            candidates=candidates,
+            selection_source='single_min_abs_kappa',
+        )
 
     def solve_angle_sweep(self, angle_values_deg, P_target: float):
         """
@@ -82,8 +90,10 @@ class PlasticSolver:
 
             if len(candidates) == 1:
                 chosen = candidates[0]
+                source = 'sweep_unique'
             elif prev is None:
                 chosen = min(candidates, key=lambda c: (abs(c['kappa']), c['pivot']))
+                source = 'sweep_seed_min_abs_kappa'
             else:
                 scale_m = max(abs(prev['Mx']), abs(prev['My']), 1.0)
                 scale_y = max(self.y_top - self.y_bottom, 1e-3)
@@ -98,8 +108,15 @@ class PlasticSolver:
                     )
 
                 chosen = min(candidates, key=lambda c: (continuity_score(c), c['pivot']))
+                source = 'sweep_continuation'
 
-            results.append(chosen)
+            results.append(
+                self._with_selection_diagnostics(
+                    selected=chosen,
+                    candidates=candidates,
+                    selection_source=source,
+                )
+            )
             prev = chosen
 
         return results
@@ -149,6 +166,25 @@ class PlasticSolver:
         if self.rebar_pre_rot:
             y_steels.extend([bar['y'] for bar in self.rebar_pre_rot])
         self.y_steel_min = min(y_steels) if y_steels else miny
+
+    @staticmethod
+    def _with_selection_diagnostics(selected: dict, candidates: list[dict], selection_source: str) -> dict:
+        """Attach deterministic candidate diagnostics for tests and benchmarking.
+
+        Fields:
+        - candidate_count: number of admissible roots at this (V, P_target)
+        - selected_candidate_index: index of selected candidate in sorted candidate list
+        - selection_source: how this candidate was selected (single vs sweep policy)
+        """
+        selected_index = next(
+            (idx for idx, cand in enumerate(candidates) if cand['pivot'] == selected['pivot']),
+            None,
+        )
+        out = dict(selected)
+        out['candidate_count'] = len(candidates)
+        out['selected_candidate_index'] = selected_index
+        out['selection_source'] = selection_source
+        return out
 
     def _assemble_solution(self, angle_v_deg: float, candidate: dict) -> dict:
         y_na_solution = candidate['y_na']
