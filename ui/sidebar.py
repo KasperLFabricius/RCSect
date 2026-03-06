@@ -361,8 +361,9 @@ def _render_material_inputs():
         st.number_input("E_p", min_value=1.0, key="mat_ep_gpa", label_visibility="collapsed")
         st.markdown(r"$\varepsilon_{uk}$ [‰]")
         st.number_input("eps_pre_uk", min_value=0.0, format="%.1f", key="mat_pre_euk_pm", label_visibility="collapsed")
-        st.markdown(r"$\varepsilon_{p,0}$ [‰]")
+        st.markdown("Default εp,0 [‰]")
         st.number_input("eps_p0", min_value=0.0, format="%.1f", key="mat_initial_strain_pm", label_visibility="collapsed")
+        st.caption("Used for prestressed bars where no bar-specific εp,0 is entered.")
 
         mats["prestressed_steel"]["f_p01k"] = float(st.session_state.mat_fp01k)
         mats["prestressed_steel"]["f_pk"] = float(st.session_state.mat_fpk)
@@ -471,7 +472,7 @@ def _render_geometry_inputs():
     geom["reinforcement_mild"] = coerce_rebar_rows(edited_mild.to_dict("records"))
 
     st.write("**Prestressed Steel**")
-    st.caption("Units: x, y in m; A in mm²; εp,0 in ‰")
+    st.caption("Units: x, y in m; A in mm²; εp,0 in ‰. Bar-specific εp,0 overrides the default εp,0 from Materials.")
     df_pre = _prepare_editor_dataframe(
         geom.get("reinforcement_prestressed", []),
         expected_columns=["id", "x", "y", "area", "eps0"],

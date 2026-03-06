@@ -5,6 +5,19 @@ from shapely.ops import triangulate
 from core.geometry import split_compression_zone
 import warnings
 
+
+def _effective_prestress_eps0(bar: dict, default_eps0: float) -> float:
+    """Resolve effective prestress initial strain for a bar."""
+    eps0 = bar.get("eps0", None)
+    if eps0 is None:
+        return default_eps0
+    try:
+        eps0_f = float(eps0)
+    except (TypeError, ValueError):
+        return default_eps0
+    return eps0_f if np.isfinite(eps0_f) else default_eps0
+
+
 class PlasticSolver:
     """
     Calculates the ultimate flexural capacity of a cross section 
@@ -15,6 +28,8 @@ class PlasticSolver:
         self.concrete = concrete
         self.mild_steel = mild_steel
         self.prestressed_steel = prestressed_steel
+        default_eps0 = float(getattr(prestressed_steel, "initial_strain", 0.0) or 0.0) if prestressed_steel is not None else 0.0
+        self.prestrain_default = default_eps0 if np.isfinite(default_eps0) else 0.0
         
         # Calculate full utilization force for W1/W2 warnings
         # Assuming gross net area * f_cd. Requires verification.
@@ -27,6 +42,9 @@ class PlasticSolver:
         finds the neutral axis depth y_na, and calculates ultimate moments Mx and My.
         """
         self.poly_rot, self.rebar_mild_rot, self.rebar_pre_rot = self.cs.get_rotated_system(angle_v_deg)
+
+        default_eps0 = float(getattr(self.prestressed_steel, "initial_strain", 0.0) or 0.0) if self.prestressed_steel is not None else 0.0
+        self.prestrain_default = default_eps0 if np.isfinite(default_eps0) else 0.0
         
         minx, miny, maxx, maxy = self.poly_rot.bounds
         self.y_top = maxy
@@ -206,8 +224,9 @@ class PlasticSolver:
         # --- PRESTRESSED STEEL ---
         if self.prestressed_steel:
             for bar in self.rebar_pre_rot:
-                eps = kappa * (y_na - bar['y'])
-                sigma = self.prestressed_steel.stress(eps)
+                geometric_eps = kappa * (y_na - bar['y'])
+                total_eps = geometric_eps + _effective_prestress_eps0(bar, self.prestrain_default)
+                sigma = self.prestressed_steel.stress(total_eps)
                 force = sigma * bar['area'] * 1e-6
                 
                 N_tot += force
