@@ -32,39 +32,39 @@
 | snit | compress_force | compress_force:total_compression_abs | 14 | 1.8031324908629793 | 1.4592662917457229 | 10549.765656175703 | 1.0 |
 | snit | compress_force | compress_force:concrete_plus_all_comp_steel | 14 | 1.80313249086298 | 1.4592662917457229 | 10549.765656175703 | 1.0 |
 | snit | compress_force | compress_force:concrete_plus_comp_rebar | 14 | 1.80313249086298 | 1.4592662917457229 | 10549.765656175703 | 1.0 |
-| snit | lever_DX | lever:total_comp_to_tension:DX | 5 | 0.00014246103806207018 | 9.603880941579598e-05 | -9.372112819470386e-17 | nan |
-| snit | lever_DX | lever:concrete_comp_to_tension:DX | 5 | 0.00014722904646363299 | 9.951901493906289e-05 | -9.724097266596604e-17 | nan |
-| snit | lever_DY | lever:moment_over_compression:DY_from_Mx | 5 | 0.7568992182552471 | 0.4469953814486658 | -0.2414352804124057 | 1.0 |
-| snit | lever_DY | lever:concrete_comp_to_tension:DY_local | 5 | 1.0000000000000002 | 0.9999999999999999 | -0.7459999999999999 | 0.8 |
-| snit | lever_DY | lever:moment_over_compression:DY_from_My | 5 | 1.0000000000000002 | 0.9999999999999999 | -0.7459999999999999 | 0.8 |
-| snit | lever_DY | lever:total_comp_to_tension:DY_local | 5 | 1.0000000000000002 | 0.9999999999999999 | -0.7459999999999999 | 0.8 |
-| snit | lever_DY | lever:concrete_comp_to_tension:DY_local_negated | 5 | 1.0000000000000002 | 1.0000000000000002 | -0.7460000000000001 | 0.2 |
-| snit | lever_DY | lever:moment_over_compression:DY_from_My_negated | 5 | 1.0000000000000002 | 1.0000000000000002 | -0.7460000000000001 | 0.2 |
-| snit | lever_DY | lever:total_comp_to_tension:DY_local_negated | 5 | 1.0000000000000002 | 1.0000000000000002 | -0.7460000000000001 | 0.2 |
-| snit | lever_DY | lever:concrete_comp_to_tension:DY | 5 | 1.3889843711032042 | 0.7868218213493994 | -0.12912558556545095 | 0.8 |
-| snit | lever_DY | lever:total_comp_to_tension:DY | 5 | 1.402944820342888 | 0.7802514018615208 | -0.12195264276897122 | 0.8 |
-| snit | lever_DY | lever:moment_over_compression:DY_from_Mx_negated | 5 | 1.7931527306078838 | 1.5530046185513344 | -1.2505647195875942 | 0.0 |
-| snit | lever_DY | lever:concrete_comp_to_tension:DY_negated | 5 | 1.9927485075389393 | 1.2131781786506008 | -1.2544262367247212 | 0.2 |
-| snit | lever_DY | lever:total_comp_to_tension:DY_negated | 5 | 2.0030396461246416 | 1.2197485981384792 | -1.2612200504751876 | 0.2 |
-| snit | lever_L | lever:moment_over_total_compression:L | 5 | 0.7568992182552471 | 0.4469953814486658 | -0.2414352804124057 | 1.0 |
-| snit | lever_L | lever:total_comp_to_tension:L | 5 | 0.9409981042959045 | 0.5970551796571119 | -0.28897470695404215 | 1.0 |
-| snit | lever_L | lever:concrete_comp_to_tension:L | 5 | 0.9480343205169545 | 0.611015628896796 | -0.29573156438604925 | 1.0 |
+| snit | lever_DX | lever:total_comp_to_tension:DX | 5 | 0.00017552767775070856 | 0.00012261269759171635 | -8.296159511938419e-17 | nan |
+| snit | lever_DX | lever:concrete_comp_to_tension:DX | 5 | 0.00018188512081133214 | 0.00013035297364142072 | -8.772334329690054e-17 | nan |
+| snit | lever_DY | lever:moment_over_compression:DY_from_Mx | 5 | 0.7568992182552471 | 0.44699550028768853 | -0.2414464474931527 | 1.0 |
+| snit | lever_DY | lever:concrete_comp_to_tension:DY_local | 5 | 1.0000000000000002 | 0.9999999999999999 | -0.7460000000000001 | 0.6 |
+| snit | lever_DY | lever:total_comp_to_tension:DY_local | 5 | 1.0000000000000002 | 0.9999999999999999 | -0.7460000000000001 | 0.6 |
+| snit | lever_DY | lever:moment_over_compression:DY_from_My | 5 | 1.0000000000000002 | 1.0 | -0.7460000000000001 | 0.6 |
+| snit | lever_DY | lever:moment_over_compression:DY_from_My_negated | 5 | 1.0000000000000004 | 1.0 | -0.7459999999999999 | 0.4 |
+| snit | lever_DY | lever:concrete_comp_to_tension:DY_local_negated | 5 | 1.0000000000000004 | 1.0000000000000002 | -0.7459999999999999 | 0.4 |
+| snit | lever_DY | lever:total_comp_to_tension:DY_local_negated | 5 | 1.0000000000000004 | 1.0000000000000002 | -0.7459999999999999 | 0.4 |
+| snit | lever_DY | lever:concrete_comp_to_tension:DY | 5 | 1.3890023066884993 | 0.7868218213493994 | -0.12916079785913315 | 0.8 |
+| snit | lever_DY | lever:total_comp_to_tension:DY | 5 | 1.4029629221542417 | 0.7802514018615208 | -0.121986718132859 | 0.8 |
+| snit | lever_DY | lever:moment_over_compression:DY_from_Mx_negated | 5 | 1.7930575934820765 | 1.5530044997123114 | -1.2505535525068474 | 0.0 |
+| snit | lever_DY | lever:concrete_comp_to_tension:DY_negated | 5 | 1.9925442338594792 | 1.2131781786506008 | -1.2544262367247212 | 0.2 |
+| snit | lever_DY | lever:total_comp_to_tension:DY_negated | 5 | 2.002837008139282 | 1.2197485981384792 | -1.2612200504751876 | 0.2 |
+| snit | lever_L | lever:moment_over_total_compression:L | 5 | 0.7568992182552471 | 0.44699550028768853 | -0.2414464474931527 | 1.0 |
+| snit | lever_L | lever:total_comp_to_tension:L | 5 | 0.9409981042959045 | 0.5970370778457582 | -0.28896594567734696 | 1.0 |
+| snit | lever_L | lever:concrete_comp_to_tension:L | 5 | 0.9480343205169545 | 0.6109976933115006 | -0.29572288356276627 | 1.0 |
 | snit | strain_mild | strain_mild:max_tension | 14 | 7182060326.653316 | 1.9241558931445124 | -0.18663787187535116 | 0.0 |
 | snit | strain_mild | strain_mild:max_compression | 14 | 7182060326.653635 | 1.8377354875553746 | -0.36754709751107495 | 0.4166666666666667 |
 | snit | strain_mild | strain_mild:governing_abs_signed | 14 | 7182060326.653635 | 1.845002557990503 | -0.36754709751107495 | 0.16666666666666666 |
-| snit | strain_prestressed | strain_prestressed:incremental_max_compression | 14 | 1.2360401982615057 | 0.9703507874389298 | 5.530999488401899 | 0.9285714285714286 |
-| snit | strain_prestressed | strain_prestressed:governing_incremental_bar_incremental_strain | 14 | 1.2547743155651492 | 0.9703507874389298 | 5.530999488401899 | 0.8571428571428571 |
-| snit | strain_prestressed | strain_prestressed:incremental_governing_abs_signed | 14 | 1.2547743155651492 | 0.9703507874389298 | 5.530999488401899 | 0.8571428571428571 |
-| snit | strain_prestressed | strain_prestressed:incremental_max_tension | 14 | 1.2547743155651492 | 0.9706057723664782 | 5.532452902488925 | 0.7857142857142857 |
+| snit | strain_prestressed | strain_prestressed:incremental_max_compression | 14 | 1.2356829842586496 | 0.9703507874389298 | 5.530999488401899 | 0.9285714285714286 |
+| snit | strain_prestressed | strain_prestressed:governing_incremental_bar_incremental_strain | 14 | 1.2544304528121497 | 0.9703507874389298 | 5.530999488401899 | 0.8571428571428571 |
+| snit | strain_prestressed | strain_prestressed:incremental_governing_abs_signed | 14 | 1.2544304528121497 | 0.9703507874389298 | 5.530999488401899 | 0.8571428571428571 |
+| snit | strain_prestressed | strain_prestressed:incremental_max_tension | 14 | 1.2544304528121497 | 0.9706057723664782 | 5.532452902488925 | 0.7857142857142857 |
 | snit | strain_prestressed | strain_prestressed:compressive_side_total | 13 | 2.0160030930471287 | 2.0054385067371756 | 11.430999488401898 | 0.0 |
 | snit | strain_prestressed | strain_prestressed:stress_equivalent_governing_abs_signed | 14 | 2.0160030930471287 | 2.0054385067371756 | 11.432452902488924 | 0.0 |
 | snit | strain_prestressed | strain_prestressed:stress_equivalent_max_compression | 14 | 2.0160030930471287 | 2.0054385067371756 | 11.430999488401898 | 0.0 |
 | snit | strain_prestressed | strain_prestressed:stress_equivalent_max_tension | 14 | 2.0160030930471287 | 2.0054385067371756 | 11.432452902488924 | 0.0 |
-| snit | strain_prestressed | strain_prestressed:max_compression | 14 | 2.0227068649281725 | 2.0054385067371756 | 11.430999488401898 | 0.0 |
-| snit | strain_prestressed | strain_prestressed:governing_incremental_bar_total_strain | 14 | 2.0227068649281725 | 2.005693491664724 | 11.430999488401898 | 0.0 |
-| snit | strain_prestressed | strain_prestressed:governing_abs_signed | 14 | 2.0227068649281725 | 2.005948476592272 | 11.432452902488924 | 0.0 |
-| snit | strain_prestressed | strain_prestressed:max_tension | 14 | 2.0227068649281725 | 2.005948476592272 | 11.432452902488924 | 0.0 |
-| snit | strain_prestressed | strain_prestressed:tensile_side_total | 3 | 2.0227068649281725 | 2.0210080817989153 | 15.170301486961293 | 0.0 |
+| snit | strain_prestressed | strain_prestressed:max_compression | 14 | 2.022349650925316 | 2.0054385067371756 | 11.430999488401898 | 0.0 |
+| snit | strain_prestressed | strain_prestressed:governing_incremental_bar_total_strain | 14 | 2.022349650925316 | 2.005693491664724 | 11.430999488401898 | 0.0 |
+| snit | strain_prestressed | strain_prestressed:governing_abs_signed | 14 | 2.022349650925316 | 2.005948476592272 | 11.432452902488924 | 0.0 |
+| snit | strain_prestressed | strain_prestressed:max_tension | 14 | 2.022349650925316 | 2.005948476592272 | 11.432452902488924 | 0.0 |
+| snit | strain_prestressed | strain_prestressed:tensile_side_total | 3 | 2.022349650925316 | 2.020664219045916 | 15.167622381939871 | 0.0 |
 | tbeam | compress_force | compress_force:concrete_plus_all_comp_steel | 6 | 0.34208330619674837 | 0.30183432800382226 | -1171.2226976709694 | 1.0 |
 | tbeam | compress_force | compress_force:concrete_plus_comp_rebar | 6 | 0.34208330619674837 | 0.30183432800382226 | -1171.2226976709694 | 1.0 |
 | tbeam | compress_force | compress_force:total_compression_abs | 6 | 0.34208330619674837 | 0.30183432800382226 | -1171.2226976709694 | 1.0 |
@@ -116,14 +116,14 @@
 | fixture_family | output | candidate | max_rel_error | median_rel_error | median_signed_error | sign_agreement_rate |
 | --- | --- | --- | --- | --- | --- | --- |
 | annular | lever_DY | lever:moment_over_compression:DY_from_Mx | 0.018941372944166368 | 0.0065028467986320655 | 1.8269701708461458e-17 | 1.0 |
-| snit | lever_DY | lever:moment_over_compression:DY_from_Mx | 0.7568992182552471 | 0.4469953814486658 | -0.2414352804124057 | 1.0 |
+| snit | lever_DY | lever:moment_over_compression:DY_from_Mx | 0.7568992182552471 | 0.44699550028768853 | -0.2414464474931527 | 1.0 |
 | tbeam | lever_DY | lever:total_comp_to_tension:DY | 0.17674671474674844 | 0.05651947967833057 | -0.022192503853879803 | 1.0 |
-| snit | strain_prestressed | strain_prestressed:incremental_max_compression | 1.2360401982615057 | 0.9703507874389298 | 5.530999488401899 | 0.9285714285714286 |
+| snit | strain_prestressed | strain_prestressed:incremental_max_compression | 1.2356829842586496 | 0.9703507874389298 | 5.530999488401899 | 0.9285714285714286 |
 | tbeam | strain_prestressed | strain_prestressed:governing_abs_signed | 0.7649048389292071 | 0.6559657326041044 | -7.146305469807341 | 1.0 |
 
 ## Semantic-versus-constitutive conclusion
 
 | output | cross_family_winner | family_winners | status | max_rel_error_reported | max_rel_error_semantic_aligned |
 | --- | --- | --- | --- | --- | --- |
-| strain_prestressed |  | strain_prestressed:governing_abs_signed, strain_prestressed:incremental_max_compression | family-specific winners only | 2.0227068649281725 | 2.0227068649281725 |
-| lever_DY |  | lever:moment_over_compression:DY_from_Mx, lever:total_comp_to_tension:DY | family-specific winners only | 0.9409981042959045 | 2.4179749321480672 |
+| strain_prestressed |  | strain_prestressed:governing_abs_signed, strain_prestressed:incremental_max_compression | family-specific winners only | 2.022349650925316 | 2.022349650925316 |
+| lever_DY |  | lever:moment_over_compression:DY_from_Mx, lever:total_comp_to_tension:DY | family-specific winners only | 0.7568992182552471 | 2.4179749321480672 |

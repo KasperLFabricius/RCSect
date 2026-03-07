@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 from tests.benchmark_compare import BenchmarkSweepSpec, run_benchmark_sweeps, summarize_benchmark
 from tests.pcross_benchmark_fixture import (
     BENCHMARK_MAPPINGS,
@@ -158,6 +160,58 @@ def _semantic_gap_table(before_detail, after_detail):
     return pd.DataFrame(rows)
 
 
+
+
+def _prior_csv_if_available(path: Path):
+    try:
+        import io
+        import subprocess
+        import pandas as pd
+
+        rel = path.as_posix()
+        proc = subprocess.run(["git", "show", f"HEAD:{rel}"], check=False, capture_output=True, text=True)
+        if proc.returncode == 0 and proc.stdout.strip():
+            return pd.read_csv(io.StringIO(proc.stdout))
+    except Exception:
+        return None
+    return None
+
+
+def _legacy_shift_rows(before_detail, after_detail):
+    rows = []
+    groups = {
+        "moments": ["rel_err_Mx", "rel_err_My"],
+        "strains": ["rel_err_strain_concrete", "rel_err_strain_mild", "rel_err_strain_prestressed"],
+        "kappa": ["rel_err_kappa"],
+        "compress_force": ["rel_err_compress_force"],
+        "lever_arms": ["rel_err_L", "rel_err_DX", "rel_err_DY"],
+    }
+    for name, cols in groups.items():
+        b = _max_rel(before_detail[before_detail["Mx_ref"].notna()], cols) if before_detail is not None else None
+        a = _max_rel(after_detail[after_detail["Mx_ref"].notna()], cols)
+        rows.append({"family": "all", "output_group": name, "max_rel_before": b, "max_rel_after": a})
+
+    def family_col(df):
+        mp = {3:"tbeam",4:"tbeam",101:"snit",102:"snit",103:"snit",104:"snit",201:"annular",202:"annular"}
+        d = df.copy()
+        d["family"] = d["load_case"].map(lambda lc: mp.get(int(lc), f"lc_{int(lc)}"))
+        return d
+
+    ad = family_col(after_detail[after_detail["Mx_ref"].notna()])
+    bd = family_col(before_detail[before_detail["Mx_ref"].notna()]) if before_detail is not None else None
+    for fam, grp in ad.groupby("family"):
+        for name, cols in groups.items():
+            b = _max_rel(bd[bd["family"]==fam], cols) if bd is not None else None
+            a = _max_rel(grp, cols)
+            rows.append({"family": fam, "output_group": name, "max_rel_before": b, "max_rel_after": a})
+        warn_after = float(grp["warning_est_match"].mean()) if "warning_est_match" in grp.columns else None
+        warn_before = None
+        if bd is not None and "warning_est_match" in bd.columns:
+            warn_before = float(bd[bd["family"]==fam]["warning_est_match"].mean())
+        rows.append({"family": fam, "output_group": "warnings", "max_rel_before": warn_before, "max_rel_after": warn_after})
+    import pandas as pd
+    return pd.DataFrame(rows)
+
 def _ambiguous_output_conclusion(
     semantics_summary,
     cross_family_winners: dict[str, str],
@@ -260,6 +314,31 @@ def main() -> None:
     semantics_family_csv = out_dir / "plastic_output_semantics_family_study.csv"
     semantics_summary_md = out_dir / "plastic_output_semantics_summary.md"
     semantics_family_md = out_dir / "plastic_output_semantics_family_summary.md"
+
+
+    legacy_shift_csv = out_dir / "plastic_legacy_shift.csv"
+    legacy_shift_md = out_dir / "plastic_legacy_shift_summary.md"
+
+    prior_detail = _prior_csv_if_available(detail_csv)
+    legacy_shift = _legacy_shift_rows(prior_detail, detail)
+    legacy_shift.to_csv(legacy_shift_csv, index=False)
+
+    bands = legacy_shift[legacy_shift["family"] == "all"].copy()
+    def _bucket(v):
+        if v is None or (isinstance(v, float) and not np.isfinite(v)):
+            return "N/A"
+        if v < 0.01:
+            return "<1%"
+        if v <= 0.05:
+            return "1%-5%"
+        return ">5%"
+    bands["band_after"] = bands["max_rel_after"].map(_bucket)
+
+    md_shift = "# Plastic Legacy Shift Summary\n\n"
+    md_shift += "Phase-1 shift to direct legacy PCROSS families in benchmark fixture path.\n\n"
+    md_shift += "## Global max relative error by output group\n\n" + _markdown_table(bands[["output_group","max_rel_before","max_rel_after","band_after"]]) + "\n\n"
+    md_shift += "## Family summaries\n\n" + _markdown_table(legacy_shift[legacy_shift["family"] != "all"]) + "\n"
+    legacy_shift_md.write_text(md_shift)
 
     detail.to_csv(detail_csv, index=False)
     summary.to_csv(summary_csv, index=False)

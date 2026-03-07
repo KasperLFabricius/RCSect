@@ -6,10 +6,10 @@ annular,moments,0.006124792013084018,<1%
 annular,strains,2.0127595977897648,>5%
 annular,warnings,,match=1.000
 snit,compression force,1.8031324908629793,>5%
-snit,curvature,0.017285232770556512,1-5%
-snit,lever-arms,1.402944820342888,>5%
+snit,curvature,0.01676810600236751,1-5%
+snit,lever-arms,1.4029629221542417,>5%
 snit,moments,0.01544923061090369,1-5%
-snit,strains,2.064979612190433,>5%
+snit,strains,2.022349650925316,>5%
 snit,warnings,,N/A
 tbeam,compression force,,N/A
 tbeam,curvature,,N/A

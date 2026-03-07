@@ -41,14 +41,15 @@ def test_manual_diagnostic_rows_track_intermediate_quantities_by_order_of_magnit
     df = diagnose_manual_rows(mapping="case_d_manual_strength_plus_fe_fu")
 
     assert (df["strain_concrete_calc"] > 0.0).all()
-    assert (df["strain_mild_calc"] > 0.0).all()
-    assert (df["strain_prestressed_calc"] > 0.0).all()
+    # Legacy-reported strains are signed governing-absolute values.
+    assert (df["strain_mild_calc"].abs() > 0.0).all()
+    assert (df["strain_prestressed_calc"].abs() > 0.0).all()
     assert (df["kappa_calc"] > 0.0).all()
     assert (df["compress_force_calc"] > 0.0).all()
 
     # Ratio-style checks: keep broad but meaningful for diagnostic decomposition.
     assert (df["strain_concrete_calc"] / df["strain_concrete_ref"]).between(0.9, 1.2).all()
-    assert (df["strain_mild_calc"] / df["strain_mild_ref"]).between(0.06, 2.8).all()
+    assert ((df["strain_mild_calc"].abs()) / df["strain_mild_ref"]).between(0.06, 2.8).all()
     assert (df["strain_prestressed_calc"] / df["strain_prestressed_ref"]).between(0.2, 2.5).all()
     assert (df["kappa_calc"] / df["kappa_ref"]).between(0.55, 2.0).all()
     assert (df["compress_force_calc"] / df["compress_force_ref"]).between(0.2, 1.4).all()

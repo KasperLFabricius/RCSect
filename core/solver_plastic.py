@@ -227,22 +227,32 @@ class PlasticSolver:
 
         # [cite_start]3. Maximum Strains [cite: 761]
         max_concrete_strain = kappa * (self.y_top - y_na_solution) * 1000.0 # per mille
+        # Legacy PCROSS reporting basis: signed strain with governing absolute magnitude.
         max_mild_strain = 0.0
-        if forces_data['mild_strains_total_permille']:
-            max_mild_strain = max(forces_data['mild_strains_total_permille'])
+        mild_governing = _max_by_abs(forces_data['mild_strains_total_permille'])
+        if mild_governing is not None:
+            max_mild_strain = mild_governing
         max_prestressed_strain = None
-        if forces_data['prestressed_strains_total_permille']:
-            max_prestressed_strain = max(forces_data['prestressed_strains_total_permille'])
+        prest_governing = _max_by_abs(forces_data['prestressed_strains_total_permille'])
+        if prest_governing is not None:
+            max_prestressed_strain = prest_governing
 
         # [cite_start]4. Lever Arm Calculations [cite: 762, 763, 773, 784]
         c_comp = forces_data['centroid_compression']
         c_tens = forces_data['centroid_tension']
-        
+
         DX_rot = c_comp['x'] - c_tens['x'] if c_tens['x'] is not None else 0.0
         DY_rot = c_comp['y'] - c_tens['y'] if c_tens['y'] is not None else 0.0
-        
+
         DX_global = DX_rot * cos_a - DY_rot * sin_a
         DY_global = DX_rot * sin_a + DY_rot * cos_a
+
+        # Legacy reporting semantics: prefer lever components recovered from
+        # global moments and total compression resultant when available.
+        comp_force = float(forces_data['total_compression'])
+        if comp_force > 1e-9:
+            DY_global = Mx_global / comp_force
+            DX_global = My_global / comp_force
         L = np.sqrt(DX_global**2 + DY_global**2)
         
         # [cite_start]5. Safety Warnings [cite: 766, 767]

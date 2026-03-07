@@ -1,7 +1,7 @@
 import numpy as np
 
 from core.geometry import CrossSection
-from core.materials import Concrete, MildSteel
+from core.materials import Concrete, MildSteel, ConcreteType1, MildSteelType1, PrestressedSteelType1
 from core.solver_plastic import PlasticSolver
 from tests.benchmark_compare import BenchmarkSweepSpec, run_benchmark_sweeps
 from tests.pcross_benchmark_fixture import (
@@ -25,6 +25,14 @@ def _detailed_benchmark_df(mapping=DEFAULT_BENCHMARK_MAPPING):
 
 
 
+
+
+
+def test_fixture_builders_use_legacy_family_material_classes():
+    solver = build_pcross_tbeam_solver(prestress_eps0=0.004, mapping=DEFAULT_BENCHMARK_MAPPING)
+    assert isinstance(solver.concrete, ConcreteType1)
+    assert isinstance(solver.mild_steel, MildSteelType1)
+    assert isinstance(solver.prestressed_steel, PrestressedSteelType1)
 
 def test_manual_benchmark_mapping_factors_are_applied_in_fixture():
     mapping = BENCHMARK_MAPPINGS[DEFAULT_BENCHMARK_MAPPING]
