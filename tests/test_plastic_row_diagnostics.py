@@ -7,6 +7,7 @@ from tests.plastic_diagnostics import (
     run_output_semantics_study,
     run_type6_prestress_mapping_study,
     choose_semantic_winners,
+    choose_semantic_winners_by_family,
 )
 
 
@@ -173,8 +174,26 @@ def test_output_semantics_study_produces_candidate_scores_and_partial_winners():
         "compress_force:concrete_plus_all_comp_steel",
         "compress_force:concrete_plus_comp_rebar",
     }
-    assert "lever_DY" not in winners
+    assert winners.get("lever_DY") in {None, "lever:moment_over_compression:DY_from_Mx"}
     assert "strain_prestressed" not in winners
+
+    prest = summary[summary["output"] == "strain_prestressed"]["candidate"]
+    assert "strain_prestressed:incremental_governing_abs_signed" in set(prest)
+    assert "strain_prestressed:stress_equivalent_governing_abs_signed" in set(prest)
+
+    dy = summary[summary["output"] == "lever_DY"]["candidate"]
+    assert "lever:moment_over_compression:DY_from_Mx" in set(dy)
+    assert "lever:total_comp_to_tension:DY_local" in set(dy)
+
+
+def test_output_semantics_family_winner_study_for_ambiguous_outputs():
+    _, summary = run_output_semantics_study()
+    family = choose_semantic_winners_by_family(summary)
+
+    assert not family.empty
+    assert set(family["output"]) == {"strain_prestressed", "lever_DY"}
+    assert set(family["fixture_family"]) == {"tbeam", "snit", "annular"}
+    assert family["sign_agreement_rate"].between(0.0, 1.0).all()
 
 
 def test_semantic_aligned_profile_is_available_in_benchmark_sweeps():
@@ -195,3 +214,4 @@ def test_semantic_aligned_profile_is_available_in_benchmark_sweeps():
     assert (aligned["semantic_profile"] == "semantic_aligned").all()
     assert aligned["rel_err_compress_force"].notna().all()
     assert aligned["rel_err_L"].notna().all()
+    assert aligned["rel_err_DY"].notna().any()
