@@ -47,14 +47,13 @@ class PlasticSolver:
     Calculates the ultimate flexural capacity of a cross section 
     for a given axial load P and neutral axis angle V.
     """
-    def __init__(self, cross_section, concrete, mild_steel, prestressed_steel=None, benchmark_output_family: str | None = None):
+    def __init__(self, cross_section, concrete, mild_steel, prestressed_steel=None):
         self.cs = cross_section
         self.concrete = concrete
         self.mild_steel = mild_steel
         self.prestressed_steel = prestressed_steel
         default_eps0 = float(getattr(prestressed_steel, "initial_strain", 0.0) or 0.0) if prestressed_steel is not None else 0.0
         self.prestrain_default = default_eps0 if np.isfinite(default_eps0) else 0.0
-        self.benchmark_output_family = (benchmark_output_family or "generic").lower()
         
         # Calculate full utilization force for W1/W2 warnings
         # Assuming gross net area * f_cd. Requires verification.
@@ -237,19 +236,10 @@ class PlasticSolver:
         dx_arm_rot = c_tens['x'] - c_comp['x'] if (c_tens['x'] is not None and c_comp['x'] is not None) else 0.0
         dy_arm_rot = c_tens['y'] - c_comp['y'] if (c_tens['y'] is not None and c_comp['y'] is not None) else 0.0
 
-        # Base geometric comp->tension vector in global coordinates.
-        dx_global_base = dx_arm_rot * cos_a - dy_arm_rot * sin_a
-        dy_global_base = dx_arm_rot * sin_a + dy_arm_rot * cos_a
-
-        # Benchmark-facing PCROSS annular legacy winner:
-        # preserve global DX, flip global DY only.
-        if self.benchmark_output_family in {"annular", "pcross_annular"}:
-            dx_global = dx_global_base
-            dy_global = -dy_global_base
-        else:
-            # Legacy default used by existing non-annular benchmark families.
-            dx_global = dx_arm_rot * cos_a - (-dy_arm_rot) * sin_a
-            dy_global = dx_arm_rot * sin_a + (-dy_arm_rot) * cos_a
+        # Unified benchmark-facing PCROSS rule:
+        # use comp->tension centroid vector with DY sign inversion.
+        dx_global = dx_arm_rot * cos_a - (-dy_arm_rot) * sin_a
+        dy_global = dx_arm_rot * sin_a + (-dy_arm_rot) * cos_a
 
         return {
             "lever_DX": dx_global,

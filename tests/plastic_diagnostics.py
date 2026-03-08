@@ -1981,3 +1981,80 @@ def run_annular_dxdy_definition_study() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     summary = summary.sort_values(["max_rel_error_DX", "max_rel_error_DY", "sign_agreement_rate_DX", "sign_agreement_rate_DY"], ascending=[True, True, False, False]).reset_index(drop=True)
     return detail, summary
+
+
+def run_unified_output_rule_study() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Cross-family selection study for unified PCROSS-facing output rules."""
+    detail, _, _ = run_output_definition_study()
+    targets = {"strain_mild", "strain_prestressed", "lever_DX", "lever_DY"}
+    d = detail[detail["output"].isin(targets)].copy()
+
+    family_stats = (
+        d.groupby(["output", "candidate", "fixture_family"], dropna=False)
+        .agg(
+            count=("rel_error", "count"),
+            max_rel_error=("rel_error", "max"),
+            median_rel_error=("rel_error", "median"),
+            sign_agreement_rate=("sign_agreement", "mean"),
+        )
+        .reset_index()
+    )
+
+    global_stats = (
+        d.groupby(["output", "candidate"], dropna=False)
+        .agg(
+            count=("rel_error", "count"),
+            family_coverage=("fixture_family", "nunique"),
+            global_max_rel_error=("rel_error", "max"),
+            global_median_rel_error=("rel_error", "median"),
+            global_sign_agreement_rate=("sign_agreement", "mean"),
+        )
+        .reset_index()
+    )
+
+    per_family_worst = (
+        family_stats.groupby(["output", "candidate"], dropna=False)
+        .agg(
+            worst_family_max_rel_error=("max_rel_error", "max"),
+            worst_family_median_rel_error=("median_rel_error", "max"),
+        )
+        .reset_index()
+    )
+    summary = (
+        global_stats.merge(per_family_worst, on=["output", "candidate"], how="left")
+        .sort_values(["output", "worst_family_max_rel_error", "global_max_rel_error", "global_median_rel_error"]) 
+        .reset_index(drop=True)
+    )
+
+    winner_rows = []
+    for output in sorted(targets):
+        sub = summary[summary["output"] == output]
+        if sub.empty:
+            continue
+        best = sub.iloc[0]
+        runner = sub.iloc[1] if len(sub) > 1 else None
+        robust = False
+        if runner is not None and np.isfinite(best["worst_family_max_rel_error"]) and np.isfinite(runner["worst_family_max_rel_error"]):
+            robust = float(best["worst_family_max_rel_error"]) + 1e-12 < 0.90 * float(runner["worst_family_max_rel_error"])
+
+        winner_rows.append(
+            {
+                "output": output,
+                "best_candidate": best["candidate"],
+                "best_worst_family_max_rel_error": best["worst_family_max_rel_error"],
+                "best_global_max_rel_error": best["global_max_rel_error"],
+                "best_global_median_rel_error": best["global_median_rel_error"],
+                "best_family_coverage": int(best["family_coverage"]),
+                "runner_up_candidate": None if runner is None else runner["candidate"],
+                "runner_up_worst_family_max_rel_error": None if runner is None else runner["worst_family_max_rel_error"],
+                "single_global_winner_exists": bool(robust),
+                "remaining_gap_interpretation": (
+                    "output-definition mismatch (global winner supported)"
+                    if robust else
+                    "likely constitutive/model-form mismatch or family-specific legacy behavior"
+                ),
+            }
+        )
+
+    winners = pd.DataFrame(winner_rows).sort_values("output").reset_index(drop=True)
+    return family_stats, summary, winners

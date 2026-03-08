@@ -136,7 +136,6 @@ def build_pcross_tbeam_solver(
             gamma_E=benchmark_mapping.gamma_E,
             gamma_u=benchmark_mapping.gamma_u,
         ),
-        benchmark_output_family="tbeam",
     )
 
 
@@ -250,7 +249,6 @@ def _build_strip_solver(pre_points, p_target, type6_mapping: str | Type6Prestres
             gamma_u=mapping.gamma_u,
             gamma_E=mapping.gamma_E,
         ),
-        benchmark_output_family="snit",
     )
     return solver
 
@@ -305,7 +303,6 @@ def _build_annular_solver(outer, inner, bars, bar_area):
             gamma_E=1.0,
         ),
         prestressed_steel=None,
-        benchmark_output_family="annular",
     )
 
 

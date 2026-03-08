@@ -30,12 +30,6 @@ def _detailed_benchmark_df(mapping=DEFAULT_BENCHMARK_MAPPING):
 
 
 
-def test_pcross_fixture_builders_tag_benchmark_output_family():
-    tbeam = build_pcross_tbeam_solver(prestress_eps0=0.004)
-    ann = EMBEDDED_BENCHMARK_CASES["section0"].solver_builder()
-    assert tbeam.benchmark_output_family == "tbeam"
-    assert ann.benchmark_output_family == "annular"
-
 def test_fixture_builders_use_legacy_family_material_classes():
     solver = build_pcross_tbeam_solver(prestress_eps0=0.004, mapping=DEFAULT_BENCHMARK_MAPPING)
     assert isinstance(solver.concrete, ConcreteType1)

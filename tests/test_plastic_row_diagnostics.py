@@ -19,6 +19,7 @@ from tests.plastic_diagnostics import (
     run_tbeam_type1_interpretation_study,
     run_tbeam_reported_strain_study,
     run_annular_dxdy_definition_study,
+    run_unified_output_rule_study,
 )
 
 
@@ -368,3 +369,18 @@ def test_annular_dxdy_definition_study_ranks_flip_dy_rule_as_best_family_fit():
     assert best["candidate"] in {"A_current_branch_rule", "D_flip_DY_only"}
     assert float(best["max_rel_error_DX"]) < 0.01
     assert float(best["max_rel_error_DY"]) < 0.01
+
+
+def test_unified_output_rule_study_reports_global_winners_and_resolution_status():
+    family_detail, summary, winners = run_unified_output_rule_study()
+    assert not family_detail.empty
+    assert not summary.empty
+    assert not winners.empty
+
+    assert {"output", "candidate", "fixture_family", "max_rel_error", "median_rel_error", "sign_agreement_rate"}.issubset(family_detail.columns)
+    assert {"output", "candidate", "global_max_rel_error", "global_median_rel_error", "worst_family_max_rel_error"}.issubset(summary.columns)
+    assert {"output", "best_candidate", "single_global_winner_exists", "remaining_gap_interpretation"}.issubset(winners.columns)
+
+    assert set(winners["output"]) == {"lever_DX", "lever_DY", "strain_mild", "strain_prestressed"}
+    # Current benchmark corpus still shows unresolved global ambiguity for at least one output.
+    assert (~winners["single_global_winner_exists"]).any()
