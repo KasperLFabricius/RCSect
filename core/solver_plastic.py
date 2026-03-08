@@ -250,8 +250,12 @@ class PlasticSolver:
         c_comp = forces_data['centroid_compression']
         c_tens = forces_data['centroid_tension']
 
-        DX_rot = c_comp['x'] - c_tens['x'] if c_tens['x'] is not None else 0.0
-        DY_rot = c_comp['y'] - c_tens['y'] if c_tens['y'] is not None else 0.0
+        # Geometric internal-arm vector is tension minus compression centroid.
+        dx_arm_rot = c_tens['x'] - c_comp['x'] if c_tens['x'] is not None else 0.0
+        dy_arm_rot = c_tens['y'] - c_comp['y'] if c_tens['y'] is not None else 0.0
+        # Legacy PCROSS benchmark sign convention stores DX/DY with opposite sign.
+        DX_rot = -dx_arm_rot
+        DY_rot = -dy_arm_rot
 
         DX_global = DX_rot * cos_a - DY_rot * sin_a
         DY_global = DX_rot * sin_a + DY_rot * cos_a
@@ -292,6 +296,10 @@ class PlasticSolver:
             "strain_mild": max_mild_strain,
             "strain_prestressed": max_prestressed_strain,
             "compress_force": comp_force,
+            "compress_force_concrete": float(forces_data['concrete_compression']),
+            "compress_force_mild": float(forces_data['compression_mild']),
+            "compress_force_prestressed": float(forces_data['compression_prestress']),
+            "compress_force_total": comp_force,
             "lever_L": L,
             "lever_DX": DX_global,
             "lever_DY": DY_global,
@@ -300,6 +308,12 @@ class PlasticSolver:
             "full_design_concrete_force": full_design_concrete_force,
             "residual_abs": candidate.get('residual_abs', abs(self._equilibrium_target(y_na_solution, candidate.get('P_target', 0.0), pivot_type))),
             "debug_force_components": forces_data,
+            "debug_resultant_centroids": {
+                "comp_centroid_x": forces_data.get("comp_centroid_x"),
+                "comp_centroid_y": forces_data.get("comp_centroid_y"),
+                "tens_centroid_x": forces_data.get("tens_centroid_x"),
+                "tens_centroid_y": forces_data.get("tens_centroid_y"),
+            },
             "debug_strain_candidates": {
                 "strain_mild_max_tension_permille": max(forces_data['mild_strains_total_permille']) if forces_data['mild_strains_total_permille'] else None,
                 "strain_mild_max_compression_permille": min(forces_data['mild_strains_total_permille']) if forces_data['mild_strains_total_permille'] else None,
@@ -393,6 +407,8 @@ class PlasticSolver:
         comp_rebar_force = 0.0
         comp_mild_force = 0.0
         comp_prestress_force = 0.0
+        tens_mild_force = 0.0
+        tens_prestress_force = 0.0
         conc_comp_force = 0.0
         
         sum_x_comp, sum_y_comp = 0.0, 0.0
@@ -428,6 +444,7 @@ class PlasticSolver:
                 sum_y_comp += abs_f * bar['y']
             else:
                 total_tension += force
+                tens_mild_force += force
                 sum_x_tens += force * bar['x']
                 sum_y_tens += force * bar['y']
 
@@ -464,6 +481,7 @@ class PlasticSolver:
                     sum_y_comp += abs_f * bar['y']
                 else:
                     total_tension += force
+                    tens_prestress_force += force
                     sum_x_tens += force * bar['x']
                     sum_y_tens += force * bar['y']
 
@@ -538,9 +556,15 @@ class PlasticSolver:
             'compression_mild': comp_mild_force,
             'compression_prestress': comp_prestress_force,
             'compression_rebar_force': comp_rebar_force,
+            'tension_mild': tens_mild_force,
+            'tension_prestress': tens_prestress_force,
             'centroid_concrete_compression': c_conc_comp,
             'centroid_compression': c_comp,
             'centroid_tension': c_tens,
+            'comp_centroid_x': c_comp['x'] if total_compression > 0 else None,
+            'comp_centroid_y': c_comp['y'] if total_compression > 0 else None,
+            'tens_centroid_x': c_tens['x'],
+            'tens_centroid_y': c_tens['y'],
             'mild_bar_details': mild_bar_rows,
             'prestressed_bar_details': prestressed_bar_rows,
             'mild_strains_total_permille': [float(r['strain_total'] * 1000.0) for r in mild_bar_rows],
