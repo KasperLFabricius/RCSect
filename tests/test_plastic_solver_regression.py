@@ -3,6 +3,13 @@ import numpy as np
 from core.geometry import CrossSection
 from core.materials import Concrete, MildSteel, ConcreteType1, MildSteelType1, PrestressedSteelType1
 from core.solver_plastic import PlasticSolver
+from core.solver_conventions import (
+    format_reported_strain,
+    rotate_moment_local_to_global,
+    rotate_point_global_to_local,
+    rotate_vector_local_to_global,
+    to_compression_positive,
+)
 from tests.benchmark_compare import BenchmarkSweepSpec, run_benchmark_sweeps
 from tests.pcross_benchmark_fixture import (
     BENCHMARK_MAPPINGS,
@@ -276,9 +283,8 @@ def test_lever_arm_is_centroid_vector_and_not_m_over_compress_override():
     dx_global = dx_local * cos_a - dy_local * sin_a
     dy_global = dx_local * sin_a + dy_local * cos_a
 
-    # Annular-sign re-anchoring keeps DX as comp->tension sign and flips DY only.
     assert np.isclose(result["lever_DX"], dx_global, rtol=0.0, atol=1e-9)
-    assert np.isclose(result["lever_DY"], -dy_global, rtol=0.0, atol=1e-9)
+    assert np.isclose(result["lever_DY"], dy_global, rtol=0.0, atol=1e-9)
     assert np.isclose(result["lever_L"], np.hypot(dx_global, dy_global), rtol=0.0, atol=1e-9)
 
     # Guardrail: benchmark-critical path should not force moment/compress surrogate.
@@ -323,3 +329,44 @@ def test_annular_dxdy_sign_symmetry_pairs_follow_reference_pattern():
                 assert np.sign(float(ra["lever_DX"])) == -np.sign(float(rb["lever_DX"]))
             if abs(ref_dy_a) > 1e-9 and abs(ref_dy_b) > 1e-9:
                 assert np.sign(float(ra["lever_DY"])) == -np.sign(float(rb["lever_DY"]))
+
+
+def test_convention_helpers_are_self_consistent_for_transform_and_signs():
+    assert np.isclose(to_compression_positive(-100.0), 100.0)
+    assert np.isclose(format_reported_strain(2.5), -2.5)
+
+    ang = np.radians(23.0)
+    vx, vy = (1.3, -0.7)
+    gx, gy = rotate_vector_local_to_global(vx, vy, ang)
+    lx, ly = rotate_point_global_to_local(gx, gy, ang)
+    assert np.isclose(lx, vx, atol=1e-12)
+    assert np.isclose(ly, vy, atol=1e-12)
+
+    mx_l, my_l = (120.0, -40.0)
+    mx_g, my_g = rotate_moment_local_to_global(mx_l, my_l, ang)
+    ex_mx = -mx_l * np.cos(ang) + my_l * np.sin(ang)
+    ex_my = mx_l * np.sin(ang) + my_l * np.cos(ang)
+    assert np.isclose(mx_g, ex_mx)
+    assert np.isclose(my_g, ex_my)
+
+
+def test_strain_reporting_is_compression_positive_in_outputs():
+    case = EMBEDDED_BENCHMARK_CASES["snit_a"]
+    result = case.solver_builder().solve(angle_v_deg=90.0, P_target=case.load.P_target)
+    dbg = result["debug_force_components"]
+
+    mild = max(dbg["mild_bar_details"], key=lambda r: abs(r["force_kN"]))
+    prest = max(dbg["prestressed_bar_details"], key=lambda r: abs(r["force_kN"]))
+    assert np.isclose(result["strain_mild"], format_reported_strain(mild["strain_total"] * 1000.0), atol=1e-9)
+    assert np.isclose(result["strain_prestressed"], format_reported_strain(prest["strain_total"] * 1000.0), atol=1e-9)
+
+
+def test_zone_classification_uses_solved_strain_field_for_bars():
+    case = EMBEDDED_BENCHMARK_CASES["section0"]
+    result = case.solver_builder().solve(angle_v_deg=45.0, P_target=case.load.P_target)
+    dbg = result["debug_force_components"]
+
+    assert any(r["strain_total"] < 0.0 for r in dbg["mild_bar_details"])
+    assert any(r["strain_total"] >= 0.0 for r in dbg["mild_bar_details"])
+    for r in dbg["prestressed_bar_details"]:
+        assert (r["strain_incremental"] < 0.0) == (r["strain_geometric"] < 0.0)

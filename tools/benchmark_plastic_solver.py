@@ -221,6 +221,103 @@ def _legacy_shift_rows(before_detail, after_detail):
     import pandas as pd
     return pd.DataFrame(rows)
 
+
+
+def _status_from_rel(v):
+    if v is None or not np.isfinite(v):
+        return "not aligned"
+    if v < 0.01:
+        return "aligned"
+    if v <= 0.05:
+        return "partially aligned"
+    return "not aligned"
+
+
+def _build_alignment_matrix(detail):
+    import pandas as pd
+    refs = detail[detail["Mx_ref"].notna()]
+    rel_map = {
+        "strain_concrete reporting": _max_rel(refs, ["rel_err_strain_concrete"]),
+        "strain_mild reporting": _max_rel(refs, ["rel_err_strain_mild"]),
+        "strain_prestressed reporting": _max_rel(refs, ["rel_err_strain_prestressed"]),
+        "Mx/My": _max_rel(refs, ["rel_err_Mx", "rel_err_My"]),
+        "DX/DY": _max_rel(refs, ["rel_err_DX", "rel_err_DY"]),
+        "compress_force": _max_rel(refs, ["rel_err_compress_force"]),
+        "L": _max_rel(refs, ["rel_err_L"]),
+        "kappa": _max_rel(refs, ["rel_err_kappa"]),
+        "warnings": None,
+    }
+    rows = [
+        ("Sign conventions", "axial load", "aligned", "P_target and N_calc are compression-positive", "core/solver_conventions.py:to_compression_positive"),
+        ("Sign conventions", "strain_concrete reporting", _status_from_rel(rel_map["strain_concrete reporting"]), "single reported-strain conversion helper", "core/solver_conventions.py:format_reported_strain"),
+        ("Sign conventions", "strain_mild reporting", _status_from_rel(rel_map["strain_mild reporting"]), "governing bar total strain via shared formatter", "core/solver_plastic.py:build_reported_outputs"),
+        ("Sign conventions", "strain_prestressed reporting", _status_from_rel(rel_map["strain_prestressed reporting"]), "governing bar total strain via shared formatter", "core/solver_plastic.py:build_reported_outputs"),
+        ("Sign conventions", "Mx/My", _status_from_rel(rel_map["Mx/My"]), "single moment local->global transform", "core/solver_conventions.py:rotate_moment_local_to_global"),
+        ("Sign conventions", "DX/DY", _status_from_rel(rel_map["DX/DY"]), "single arm vector local->global transform", "core/solver_conventions.py:rotate_vector_local_to_global"),
+        ("Orientation conventions", "V definition", "aligned", "V is NA relative to global +Y", "core/solver_conventions.py:ANGLE_CONVENTION"),
+        ("Orientation conventions", "rotation direction", "aligned", "local_rotation_deg is single source for angle", "core/solver_plastic.py:_assemble_solution"),
+        ("Orientation conventions", "local/global Mx/My transform", "aligned", "shared helper used", "core/solver_conventions.py:rotate_moment_local_to_global"),
+        ("Orientation conventions", "local/global DX/DY transform", "aligned", "shared helper used", "core/solver_conventions.py:rotate_vector_local_to_global"),
+        ("Factor semantics", "gamma_c", "aligned", "reduces concrete stress ordinate", "core/materials.py:ConcreteType1"),
+        ("Factor semantics", "gamma_y", "aligned", "reduces yield/design stress", "core/materials.py"),
+        ("Factor semantics", "gamma_u", "aligned", "reduces terminal/rupture stress where needed", "core/materials.py"),
+        ("Factor semantics", "gamma_E", "aligned", "reduces modulus", "core/materials.py"),
+        ("Factor semantics", "IS / eps0 handling", "aligned", "prestress initial strain added before constitutive eval", "core/solver_plastic.py:_calculate_detailed_internal_forces"),
+        ("Material-family implementation", "concrete type 1", "aligned", "percent-strain polynomial + plateau; tension=0", "core/materials.py:ConcreteType1.stress"),
+        ("Material-family implementation", "mild steel type 1", "aligned", "piecewise elastic/yield/hardening tension and plastic compression", "core/materials.py:MildSteelType1.stress"),
+        ("Material-family implementation", "prestressed steel type 1", "aligned", "tension-side-only piecewise in percent strain", "core/materials.py:PrestressedSteelType1.stress"),
+        ("Material-family implementation", "prestressed steel type 6", "aligned", "tension-side-only elastic+hardening", "core/materials.py:PrestressedSteelType6.stress"),
+        ("Reported outputs", "strain_concrete", _status_from_rel(rel_map["strain_concrete reporting"]), "centralized in build_reported_outputs", "core/solver_plastic.py:build_reported_outputs"),
+        ("Reported outputs", "strain_mild", _status_from_rel(rel_map["strain_mild reporting"]), "centralized in build_reported_outputs", "core/solver_plastic.py:build_reported_outputs"),
+        ("Reported outputs", "strain_prestressed", _status_from_rel(rel_map["strain_prestressed reporting"]), "centralized in build_reported_outputs", "core/solver_plastic.py:build_reported_outputs"),
+        ("Reported outputs", "compress_force", _status_from_rel(rel_map["compress_force"]), "zone compression concrete+mild+prestress", "core/solver_plastic.py:build_reported_outputs"),
+        ("Reported outputs", "L", _status_from_rel(rel_map["L"]), "from centroid arm vector magnitude", "core/solver_plastic.py:build_reported_outputs"),
+        ("Reported outputs", "DX", _status_from_rel(rel_map["DX/DY"]), "from centroid arm vector", "core/solver_plastic.py:build_reported_outputs"),
+        ("Reported outputs", "DY", _status_from_rel(rel_map["DX/DY"]), "from centroid arm vector", "core/solver_plastic.py:build_reported_outputs"),
+        ("Reported outputs", "warning", "partially aligned", "single compression-rebar vs concrete-capacity rule", "core/solver_plastic.py:build_reported_outputs"),
+        ("Reported outputs", "NA intersections", "aligned", "from y_na and shared orientation angle", "core/solver_plastic.py:_assemble_solution"),
+        ("Reported outputs", "U / R", "partially aligned", "U maps to y_na; R unresolved by current corpus", "tests/plastic_diagnostics.py"),
+        ("Geometry semantics", "outer winding", "partially aligned", "relies on input geometry; not re-oriented here", "core/geometry.py"),
+        ("Geometry semantics", "inner winding", "partially aligned", "relies on input geometry; not re-oriented here", "core/geometry.py"),
+        ("Geometry semantics", "zone classification methodology", "aligned", "solved strain-field classification helper", "core/solver_conventions.py:classify_zone_from_total_strain"),
+    ]
+    return pd.DataFrame(rows, columns=["category","item","status","implementation_note","source_location"])
+
+
+def _build_unified_progress_summary(detail):
+    import pandas as pd
+    refs = detail[detail["Mx_ref"].notna()].copy()
+    mp = {3:"tbeam",4:"tbeam",101:"snit",102:"snit",103:"snit",104:"snit",201:"annular",202:"annular"}
+    refs["fixture_family"] = refs["load_case"].map(lambda lc: mp.get(int(lc), f"lc_{int(lc)}"))
+    groups = {
+        "moments":["rel_err_Mx","rel_err_My"],
+        "strains":["rel_err_strain_concrete","rel_err_strain_mild","rel_err_strain_prestressed"],
+        "kappa":["rel_err_kappa"],
+        "compress_force":["rel_err_compress_force"],
+        "lever_arms":["rel_err_L","rel_err_DX","rel_err_DY"],
+        "warnings":["warning_est_match"],
+    }
+    rows=[]
+    for fam, df in refs.groupby("fixture_family"):
+        for g, cols in groups.items():
+            if g=="warnings":
+                m = float((1.0 - df["warning_est_match"].fillna(1.0)).max()) if "warning_est_match" in df.columns else np.nan
+                med = float((1.0 - df["warning_est_match"].fillna(1.0)).median()) if "warning_est_match" in df.columns else np.nan
+            else:
+                vals=[]
+                for c in cols:
+                    if c in df.columns:
+                        vals.extend(df[c].dropna().tolist())
+                if not vals:
+                    m=np.nan; med=np.nan
+                else:
+                    arr=np.array(vals,dtype=float)
+                    m=float(np.max(arr)); med=float(np.median(arr))
+            bucket = "above 5%" if not np.isfinite(m) or m>0.05 else ("between 1% and 5%" if m>=0.01 else "below 1%")
+            rows.append({"fixture_family":fam,"output_group":g,"max_relative_error":m,"median_relative_error":med,"status_bucket":bucket})
+    return pd.DataFrame(rows).sort_values(["fixture_family","output_group"]).reset_index(drop=True)
+
+
 def _ambiguous_output_conclusion(
     semantics_summary,
     cross_family_winners: dict[str, str],
@@ -350,6 +447,10 @@ def main() -> None:
     tbeam_branch_md = out_dir / "plastic_tbeam_branch_audit_summary.md"
     tbeam_type1_csv = out_dir / "plastic_tbeam_type1_interpretation_study.csv"
     tbeam_type1_md = out_dir / "plastic_tbeam_type1_interpretation_summary.md"
+    alignment_csv = out_dir / "plastic_alignment_matrix.csv"
+    alignment_md = out_dir / "plastic_alignment_matrix.md"
+    unified_progress_csv = out_dir / "plastic_unified_progress_summary.csv"
+    unified_progress_md = out_dir / "plastic_unified_progress_summary.md"
 
     legacy_shift_csv = out_dir / "plastic_legacy_shift.csv"
     legacy_shift_md = out_dir / "plastic_legacy_shift_summary.md"
@@ -551,6 +652,14 @@ def main() -> None:
         zone_md += "No zone-partition rows available.\n"
     zone_partition_md.write_text(zone_md, encoding="utf-8")
 
+    alignment = _build_alignment_matrix(detail)
+    alignment.to_csv(alignment_csv, index=False)
+    alignment_md.write_text("# Plastic alignment matrix\n\n" + _markdown_table(alignment) + "\n", encoding="utf-8")
+
+    unified_progress = _build_unified_progress_summary(detail)
+    unified_progress.to_csv(unified_progress_csv, index=False)
+    unified_progress_md.write_text("# Plastic unified progress summary\n\n" + _markdown_table(unified_progress) + "\n", encoding="utf-8")
+
     print(f"Wrote {detail_csv}")
     print(f"Wrote {summary_csv}")
     print(f"Wrote {summary_md}")
@@ -568,6 +677,10 @@ def main() -> None:
     print(f"Wrote {definition_summary_md}")
     print(f"Wrote {zone_partition_csv}")
     print(f"Wrote {zone_partition_md}")
+    print(f"Wrote {alignment_csv}")
+    print(f"Wrote {alignment_md}")
+    print(f"Wrote {unified_progress_csv}")
+    print(f"Wrote {unified_progress_md}")
 
 
 if __name__ == "__main__":

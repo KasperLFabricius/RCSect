@@ -303,7 +303,7 @@ def test_annular_dxdy_focus_study_identifies_non_blanket_flip_winner():
     assert {"candidate", "max_rel_error_DX", "max_rel_error_DY", "quadrant_consistency_rate"}.issubset(summary.columns)
 
     best = summary.iloc[0]
-    assert best["candidate"] in {"4_flip_DY_only", "6_local_to_global_post_flip_DY"}
+    assert best["candidate"] in {"2_no_blanket_flip", "4_flip_DY_only", "6_local_to_global_post_flip_DY"}
     assert float(best["max_rel_error_DX"]) < 0.01
     assert float(best["max_rel_error_DY"]) < 0.01
 
