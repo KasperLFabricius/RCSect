@@ -580,3 +580,211 @@ def diagnostics_markdown(df: pd.DataFrame) -> str:
 
     md += "\nConclusion: " + conclusion + "\n"
     return md
+
+
+
+def _nearest_bar_strain(rows: list[dict], which: str = "compression", field: str = "strain_total") -> tuple[float, str | None]:
+    if not rows:
+        return (np.nan, None)
+    if which == "compression":
+        chosen = max(rows, key=lambda r: float(r.get("y", -np.inf)))
+    else:
+        chosen = min(rows, key=lambda r: float(r.get("y", np.inf)))
+    return (float(chosen.get(field, np.nan)) * 1000.0, chosen.get("id"))
+
+
+def _row_output_definition_candidates(row: dict) -> list[dict]:
+    dbg = row.get("debug_force_components") or {}
+    mild_rows = dbg.get("mild_bar_details") or []
+    pre_rows = dbg.get("prestressed_bar_details") or []
+
+    out: list[dict] = []
+
+    def add(output: str, candidate: str, value: float, bar_id=None):
+        out.append({"output": output, "candidate": candidate, "value": value, "bar_id": bar_id})
+
+    # --- strain_mild candidates ---
+    if mild_rows:
+        force_gov = max(mild_rows, key=lambda b: abs(float(b.get("force_kN", 0.0))))
+        abs_gov = max(mild_rows, key=lambda b: abs(float(b.get("strain_total", 0.0))))
+        tmax = max(mild_rows, key=lambda b: float(b.get("strain_total", -np.inf)))
+        cmax = min(mild_rows, key=lambda b: float(b.get("strain_total", np.inf)))
+        near_comp_val, near_comp_id = _nearest_bar_strain(mild_rows, "compression", "strain_total")
+        near_tens_val, near_tens_id = _nearest_bar_strain(mild_rows, "tension", "strain_total")
+
+        add("strain_mild", "strain_mild:force_governing_total", float(force_gov.get("strain_total", np.nan)) * 1000.0, force_gov.get("id"))
+        add("strain_mild", "strain_mild:abs_strain_governing_total", float(abs_gov.get("strain_total", np.nan)) * 1000.0, abs_gov.get("id"))
+        add("strain_mild", "strain_mild:max_tensile_total", float(tmax.get("strain_total", np.nan)) * 1000.0, tmax.get("id"))
+        add("strain_mild", "strain_mild:max_compressive_total", float(cmax.get("strain_total", np.nan)) * 1000.0, cmax.get("id"))
+        add("strain_mild", "strain_mild:nearest_extreme_compression_total", near_comp_val, near_comp_id)
+        add("strain_mild", "strain_mild:nearest_extreme_tension_total", near_tens_val, near_tens_id)
+
+    # --- strain_prestressed candidates ---
+    if pre_rows:
+        force_gov = max(pre_rows, key=lambda b: abs(float(b.get("force_kN", 0.0))))
+        inc_force_gov = max(pre_rows, key=lambda b: abs(float(b.get("force_kN", 0.0))))
+        abs_gov = max(pre_rows, key=lambda b: abs(float(b.get("strain_total", 0.0))))
+        abs_inc_gov = max(pre_rows, key=lambda b: abs(float(b.get("strain_incremental", 0.0))))
+        tmax = max(pre_rows, key=lambda b: float(b.get("strain_total", -np.inf)))
+        tmax_inc = max(pre_rows, key=lambda b: float(b.get("strain_incremental", -np.inf)))
+        cmax = min(pre_rows, key=lambda b: float(b.get("strain_total", np.inf)))
+        cmax_inc = min(pre_rows, key=lambda b: float(b.get("strain_incremental", np.inf)))
+        near_comp_t, near_comp_id = _nearest_bar_strain(pre_rows, "compression", "strain_total")
+        near_tens_t, near_tens_id = _nearest_bar_strain(pre_rows, "tension", "strain_total")
+
+        add("strain_prestressed", "strain_prestressed:force_governing_total", float(force_gov.get("strain_total", np.nan)) * 1000.0, force_gov.get("id"))
+        add("strain_prestressed", "strain_prestressed:force_governing_incremental", float(inc_force_gov.get("strain_incremental", np.nan)) * 1000.0, inc_force_gov.get("id"))
+        add("strain_prestressed", "strain_prestressed:abs_strain_governing_total", float(abs_gov.get("strain_total", np.nan)) * 1000.0, abs_gov.get("id"))
+        add("strain_prestressed", "strain_prestressed:abs_strain_governing_incremental", float(abs_inc_gov.get("strain_incremental", np.nan)) * 1000.0, abs_inc_gov.get("id"))
+        add("strain_prestressed", "strain_prestressed:max_tensile_total", float(tmax.get("strain_total", np.nan)) * 1000.0, tmax.get("id"))
+        add("strain_prestressed", "strain_prestressed:max_tensile_incremental", float(tmax_inc.get("strain_incremental", np.nan)) * 1000.0, tmax_inc.get("id"))
+        add("strain_prestressed", "strain_prestressed:max_compressive_total", float(cmax.get("strain_total", np.nan)) * 1000.0, cmax.get("id"))
+        add("strain_prestressed", "strain_prestressed:max_compressive_incremental", float(cmax_inc.get("strain_incremental", np.nan)) * 1000.0, cmax_inc.get("id"))
+        add("strain_prestressed", "strain_prestressed:nearest_extreme_compression_total", near_comp_t, near_comp_id)
+        add("strain_prestressed", "strain_prestressed:nearest_extreme_tension_total", near_tens_t, near_tens_id)
+
+    # --- compress force candidates ---
+    conc = float(dbg.get("concrete_compression", np.nan))
+    comp_mild = float(dbg.get("compression_mild", np.nan))
+    comp_pre = float(dbg.get("compression_prestress", np.nan))
+    total_comp = float(dbg.get("total_compression", np.nan))
+
+    add("compress_force", "compress_force:concrete_only", conc)
+    add("compress_force", "compress_force:concrete_plus_comp_mild", conc + comp_mild)
+    add("compress_force", "compress_force:concrete_plus_comp_mild_plus_comp_prestress", conc + comp_mild + comp_pre)
+    add("compress_force", "compress_force:total_compression_abs", abs(total_comp))
+    add("compress_force", "compress_force:full_compression_resultant_abs", abs(total_comp))
+
+    # --- lever candidates ---
+    c_comp = dbg.get("centroid_compression") or {}
+    c_tens = dbg.get("centroid_tension") or {}
+    c_conc = dbg.get("centroid_concrete_compression") or {}
+
+    if c_comp.get("x") is not None and c_tens.get("x") is not None:
+        dx = float(c_tens["x"] - c_comp["x"])
+        dy = float(c_tens["y"] - c_comp["y"])
+        add("lever_DX", "lever:centroid_total:dx", dx)
+        add("lever_DY", "lever:centroid_total:dy", dy)
+        add("lever_DX", "lever:centroid_total:dx_negated", -dx)
+        add("lever_DY", "lever:centroid_total:dy_negated", -dy)
+        add("lever_L", "lever:centroid_total:L", float(np.hypot(dx, dy)))
+
+    if c_conc.get("x") is not None and c_tens.get("x") is not None:
+        dx = float(c_tens["x"] - c_conc["x"])
+        dy = float(c_tens["y"] - c_conc["y"])
+        add("lever_DX", "lever:centroid_concrete_to_tension:dx", dx)
+        add("lever_DY", "lever:centroid_concrete_to_tension:dy", dy)
+        add("lever_DX", "lever:centroid_concrete_to_tension:dx_negated", -dx)
+        add("lever_DY", "lever:centroid_concrete_to_tension:dy_negated", -dy)
+        add("lever_L", "lever:centroid_concrete_to_tension:L", float(np.hypot(dx, dy)))
+
+    # local->global and direct-global are equivalent transforms; keep explicit names
+    add("lever_DX", "lever:reported:DX", float(row.get("lever_DX", np.nan)))
+    add("lever_DY", "lever:reported:DY", float(row.get("lever_DY", np.nan)))
+    add("lever_L", "lever:reported:L", float(row.get("lever_L", np.nan)))
+
+    cf = float(row.get("compress_force", np.nan))
+    if np.isfinite(cf) and abs(cf) > 1e-12:
+        add("lever_DY", "lever:moment_over_compress_global:DY_from_Mx", float(row.get("Mx", np.nan)) / cf)
+        add("lever_DX", "lever:moment_over_compress_global:DX_from_My", float(row.get("My", np.nan)) / cf)
+        add("lever_DY", "lever:moment_over_compress_local:DY_from_Mx_local", float(row.get("Mx_local", np.nan)) / cf)
+        add("lever_DX", "lever:moment_over_compress_local:DX_from_My_local", float(row.get("My_local", np.nan)) / cf)
+        lx = float(row.get("My_local", np.nan)) / cf if np.isfinite(float(row.get("My_local", np.nan))) else np.nan
+        ly = float(row.get("Mx_local", np.nan)) / cf if np.isfinite(float(row.get("Mx_local", np.nan))) else np.nan
+        add("lever_L", "lever:moment_over_compress_local:L", float(np.hypot(lx, ly)) if np.isfinite(lx) and np.isfinite(ly) else np.nan)
+
+    return out
+
+
+def run_output_definition_study() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    from tests.benchmark_compare import BenchmarkSweepSpec
+
+    case_rows = []
+    for key, case in EMBEDDED_BENCHMARK_CASES.items():
+        family = (
+            "tbeam" if case.load_case in (3, 4)
+            else "snit" if case.load_case in (101, 102, 103, 104)
+            else "annular"
+        )
+        refs = case.reference_rows
+        solver = case.solver_builder()
+        specs = [BenchmarkSweepSpec(load_case=case.load_case, p_target=case.load.P_target, angles_deg=case.load.angles_deg)]
+        for spec in specs:
+            solved = solver.solve_angle_sweep(spec.angles_deg, spec.p_target)
+            by_angle = {float(r["angle_v_deg"]): r for r in solved}
+            for angle in spec.angles_deg:
+                a = float(angle)
+                row = by_angle[a]
+                ref = refs.get((spec.load_case, a), None)
+                if ref is None:
+                    continue
+
+                ref_map = {
+                    "strain_mild": ref.get("strain_mild"),
+                    "strain_prestressed": ref.get("strain_prestressed"),
+                    "compress_force": ref.get("compress_force"),
+                    "lever_L": ref.get("lever_L", ref.get("L")),
+                    "lever_DX": ref.get("lever_DX", ref.get("DX")),
+                    "lever_DY": ref.get("lever_DY", ref.get("DY")),
+                }
+
+                candidates = _row_output_definition_candidates(row)
+                for c in candidates:
+                    output = c["output"]
+                    rval = ref_map.get(output)
+                    if rval is None or not np.isfinite(float(rval)):
+                        continue
+                    rval_u = float(rval) * 10.0 if output.startswith("strain_") and abs(float(rval)) <= 1.0 else float(rval)
+                    calc = c["value"]
+                    case_rows.append({
+                        "fixture": key,
+                        "fixture_family": family,
+                        "load_case": spec.load_case,
+                        "V_deg": a,
+                        "output": output,
+                        "candidate": c["candidate"],
+                        "source_bar_id": c.get("bar_id"),
+                        "ref": rval_u,
+                        "calc": float(calc) if np.isfinite(calc) else np.nan,
+                        "signed_error": (float(calc) - rval_u) if np.isfinite(calc) else np.nan,
+                        "rel_error": _safe_rel_err(calc, rval_u),
+                        "sign_agreement": _sign_agreement(calc, rval_u),
+                    })
+
+    detail = pd.DataFrame(case_rows)
+    summary = (
+        detail.groupby(["fixture_family", "output", "candidate"], dropna=False)
+        .agg(
+            count=("rel_error", "count"),
+            max_rel_error=("rel_error", "max"),
+            median_rel_error=("rel_error", "median"),
+            median_signed_error=("signed_error", "median"),
+            sign_agreement_rate=("sign_agreement", "mean"),
+        )
+        .reset_index()
+        .sort_values(["output", "fixture_family", "max_rel_error", "median_rel_error"])
+        .reset_index(drop=True)
+    )
+
+    winner_rows = []
+    for output in ["strain_mild", "strain_prestressed", "compress_force", "lever_L", "lever_DX", "lever_DY"]:
+        out_sub = summary[summary["output"] == output]
+        if out_sub.empty:
+            continue
+        best = out_sub.sort_values(["fixture_family", "max_rel_error", "median_rel_error"]).groupby("fixture_family", as_index=False).first()
+        cand_counts = best["candidate"].value_counts()
+        cross = cand_counts.index[0] if (not cand_counts.empty and int(cand_counts.iloc[0]) == 3) else None
+        for _, r in best.iterrows():
+            winner_rows.append({
+                "output": output,
+                "fixture_family": r["fixture_family"],
+                "best_candidate": r["candidate"],
+                "max_rel_error": r["max_rel_error"],
+                "median_rel_error": r["median_rel_error"],
+                "sign_agreement_rate": r["sign_agreement_rate"],
+                "cross_family_winner": cross,
+                "cross_family_winner_exists": bool(cross is not None),
+            })
+
+    winners = pd.DataFrame(winner_rows).sort_values(["output", "fixture_family"]).reset_index(drop=True)
+    return detail, summary, winners

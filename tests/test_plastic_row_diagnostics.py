@@ -5,6 +5,7 @@ from tests.plastic_diagnostics import (
     diagnose_manual_rows,
     run_contribution_study,
     run_output_semantics_study,
+    run_output_definition_study,
     run_type6_prestress_mapping_study,
     choose_semantic_winners,
     choose_semantic_winners_by_family,
@@ -217,3 +218,20 @@ def test_semantic_aligned_profile_is_available_in_benchmark_sweeps():
     assert aligned["rel_err_compress_force"].notna().all()
     assert aligned["rel_err_L"].notna().all()
     assert aligned["rel_err_DY"].notna().any()
+
+
+def test_output_definition_study_reports_family_winners_and_cross_family_status():
+    detail, summary, winners = run_output_definition_study()
+
+    assert not detail.empty
+    assert not summary.empty
+    assert not winners.empty
+    assert {"output", "candidate", "max_rel_error", "median_rel_error"}.issubset(summary.columns)
+    assert {"output", "fixture_family", "best_candidate", "cross_family_winner_exists"}.issubset(winners.columns)
+
+    required_outputs = {"strain_mild", "strain_prestressed", "compress_force", "lever_L", "lever_DX", "lever_DY"}
+    assert required_outputs.issubset(set(summary["output"]))
+
+    # Current corpus still indicates family-specific semantics for at least one blocking output.
+    unresolved = winners.groupby("output")["cross_family_winner_exists"].first()
+    assert (~unresolved).any()

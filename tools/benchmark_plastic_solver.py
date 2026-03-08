@@ -23,6 +23,7 @@ from tests.plastic_diagnostics import (
     diagnostics_markdown,
     run_contribution_study,
     run_output_semantics_study,
+    run_output_definition_study,
     run_type6_prestress_mapping_study,
 )
 
@@ -295,6 +296,7 @@ def main() -> None:
     contribution_summary, contribution_signed = run_contribution_study()
     type6_study = run_type6_prestress_mapping_study()
     semantics_detail, semantics_summary = run_output_semantics_study()
+    definition_detail, definition_summary, definition_winners = run_output_definition_study()
     semantic_winners = choose_semantic_winners(semantics_summary)
     family_winners = choose_semantic_winners_by_family(semantics_summary)
     grouped_readiness = _output_group_summary(detail_aligned)
@@ -314,6 +316,8 @@ def main() -> None:
     semantics_family_csv = out_dir / "plastic_output_semantics_family_study.csv"
     semantics_summary_md = out_dir / "plastic_output_semantics_summary.md"
     semantics_family_md = out_dir / "plastic_output_semantics_family_summary.md"
+    definition_detail_csv = out_dir / "plastic_output_definition_study.csv"
+    definition_summary_md = out_dir / "plastic_output_definition_summary.md"
 
 
     legacy_shift_csv = out_dir / "plastic_legacy_shift.csv"
@@ -349,6 +353,7 @@ def main() -> None:
     grouped_readiness.to_csv(grouped_readiness_csv, index=False)
     semantics_detail.to_csv(semantics_detail_csv, index=False)
     family_winners.to_csv(semantics_family_csv, index=False)
+    definition_detail.to_csv(definition_detail_csv, index=False)
 
     referenced = detail[detail["Mx_ref"].notna()][
         [
@@ -436,6 +441,19 @@ def main() -> None:
     semantics_summary_md.write_text(sem_md, encoding="utf-8")
     semantics_family_md.write_text(_markdown_table(ambiguous_conclusion), encoding="utf-8")
 
+
+    def_md = "# Plastic output-definition candidate study\n\n"
+    def_md += "Family-specific candidate scoring for unresolved outputs.\n\n"
+    def_md += "## Candidate metrics by family/output\n\n"
+    def_md += _markdown_table(definition_summary)
+    def_md += "\n\n## Best candidate by family and cross-family winner status\n\n"
+    def_md += _markdown_table(definition_winners)
+    if not definition_winners.empty:
+        unresolved = definition_winners[definition_winners["cross_family_winner_exists"] == False]["output"].drop_duplicates().tolist()
+        if unresolved:
+            def_md += "\n\nNo cross-family winner: " + ", ".join(unresolved) + "\n"
+    definition_summary_md.write_text(def_md, encoding="utf-8")
+
     print(f"Wrote {detail_csv}")
     print(f"Wrote {summary_csv}")
     print(f"Wrote {summary_md}")
@@ -449,6 +467,8 @@ def main() -> None:
     print(f"Wrote {semantics_family_csv}")
     print(f"Wrote {semantics_summary_md}")
     print(f"Wrote {semantics_family_md}")
+    print(f"Wrote {definition_detail_csv}")
+    print(f"Wrote {definition_summary_md}")
 
 
 if __name__ == "__main__":
