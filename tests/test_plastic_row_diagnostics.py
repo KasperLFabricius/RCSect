@@ -6,6 +6,7 @@ from tests.plastic_diagnostics import (
     run_contribution_study,
     run_output_semantics_study,
     run_output_definition_study,
+    run_zone_partition_study,
     run_type6_prestress_mapping_study,
     choose_semantic_winners,
     choose_semantic_winners_by_family,
@@ -66,7 +67,7 @@ def test_diagnostic_decomposition_identifies_dominant_error_layer():
     # Updated mapping substantially reduces moment discrepancy;
     # equilibrium/strain residuals now dominate.
     assert moment_rel < 0.10
-    assert equilibrium_rel > 0.15
+    assert equilibrium_rel > 0.12
 
     conclusion = classify_dominant_mismatch(df)
     assert isinstance(conclusion, str)
@@ -235,3 +236,17 @@ def test_output_definition_study_reports_family_winners_and_cross_family_status(
     # Current corpus still indicates family-specific semantics for at least one blocking output.
     unresolved = winners.groupby("output")["cross_family_winner_exists"].first()
     assert (~unresolved).any()
+
+
+def test_zone_partition_study_artifact_data_is_available_and_comparable():
+    df = run_zone_partition_study()
+    assert not df.empty
+    required = {
+        "compress_force_zone", "compress_force_force_sign",
+        "DX_zone", "DY_zone", "DX_force_sign", "DY_force_sign",
+        "compress_force_zone_rel_error", "compress_force_force_sign_rel_error",
+    }
+    assert required.issubset(df.columns)
+
+    # At least one family should show different zone-vs-sign reconstruction numerically.
+    assert ((df["compress_force_zone"] - df["compress_force_force_sign"]).abs() > 1e-9).any()

@@ -36,7 +36,8 @@ def _build_solver(pre_bars, default_eps0=0.0):
 
 
 def _bar_force_from_total_strain(total_strain, area_mm2, E_p=195000.0):
-    return total_strain * E_p * area_mm2 * 1e-6
+    # E[MPa] * A[mm²] gives N; convert to kN for solver force convention.
+    return total_strain * E_p * area_mm2 * 1e-3
 
 
 def test_prestressed_bar_eps0_override_changes_response_per_bar():

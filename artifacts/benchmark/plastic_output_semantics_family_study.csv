@@ -1,6 +1,6 @@
 fixture_family,output,candidate,max_rel_error,median_rel_error,median_signed_error,sign_agreement_rate
 annular,lever_DY,lever:moment_over_compression:DY_from_Mx,0.01673549740630647,0.005444119768875782,1.0535355752835208e-17,1.0
-snit,lever_DY,lever:moment_over_compression:DY_from_Mx,0.7556945659781411,0.4461002226598369,-0.24145378910868565,1.0
+snit,lever_DY,lever:moment_over_compression:DY_from_Mx,0.5264131359907772,0.23261532421263356,-0.17353103186262464,1.0
 tbeam,lever_DY,lever:total_comp_to_tension:DY,0.18566068957314075,0.06530856727151402,-0.028616260629365203,1.0
 snit,strain_prestressed,strain_prestressed:incremental_max_compression,1.22658529680141,0.9655275875482525,5.503507249025039,0.9285714285714286
 tbeam,strain_prestressed,strain_prestressed:tensile_side_total,0.676309013497533,0.676309013497533,-8.430191853246749,1.0

@@ -24,6 +24,7 @@ from tests.plastic_diagnostics import (
     run_contribution_study,
     run_output_semantics_study,
     run_output_definition_study,
+    run_zone_partition_study,
     run_type6_prestress_mapping_study,
 )
 
@@ -297,6 +298,7 @@ def main() -> None:
     type6_study = run_type6_prestress_mapping_study()
     semantics_detail, semantics_summary = run_output_semantics_study()
     definition_detail, definition_summary, definition_winners = run_output_definition_study()
+    zone_partition = run_zone_partition_study()
     semantic_winners = choose_semantic_winners(semantics_summary)
     family_winners = choose_semantic_winners_by_family(semantics_summary)
     grouped_readiness = _output_group_summary(detail_aligned)
@@ -318,6 +320,8 @@ def main() -> None:
     semantics_family_md = out_dir / "plastic_output_semantics_family_summary.md"
     definition_detail_csv = out_dir / "plastic_output_definition_study.csv"
     definition_summary_md = out_dir / "plastic_output_definition_summary.md"
+    zone_partition_csv = out_dir / "plastic_zone_partition_study.csv"
+    zone_partition_md = out_dir / "plastic_zone_partition_summary.md"
 
 
     legacy_shift_csv = out_dir / "plastic_legacy_shift.csv"
@@ -354,6 +358,7 @@ def main() -> None:
     semantics_detail.to_csv(semantics_detail_csv, index=False)
     family_winners.to_csv(semantics_family_csv, index=False)
     definition_detail.to_csv(definition_detail_csv, index=False)
+    zone_partition.to_csv(zone_partition_csv, index=False)
 
     referenced = detail[detail["Mx_ref"].notna()][
         [
@@ -454,6 +459,28 @@ def main() -> None:
             def_md += "\n\nNo cross-family winner: " + ", ".join(unresolved) + "\n"
     definition_summary_md.write_text(def_md, encoding="utf-8")
 
+
+    zone_md = "# Plastic zone-partition study\n\n"
+    zone_md += "Compare force-sign versus zone-based reconstruction for compression force and lever components.\n\n"
+    if not zone_partition.empty:
+        fam = (
+            zone_partition.groupby("fixture_family")
+            .agg(
+                compress_zone_max_rel=("compress_force_zone_rel_error", "max"),
+                compress_sign_max_rel=("compress_force_force_sign_rel_error", "max"),
+                DX_zone_max_rel=("DX_zone_rel_error", "max"),
+                DX_sign_max_rel=("DX_force_sign_rel_error", "max"),
+                DY_zone_max_rel=("DY_zone_rel_error", "max"),
+                DY_sign_max_rel=("DY_force_sign_rel_error", "max"),
+            )
+            .reset_index()
+        )
+        zone_md += "## Family summary\n\n" + _markdown_table(fam) + "\n\n"
+        zone_md += "## Row detail\n\n" + _markdown_table(zone_partition) + "\n"
+    else:
+        zone_md += "No zone-partition rows available.\n"
+    zone_partition_md.write_text(zone_md, encoding="utf-8")
+
     print(f"Wrote {detail_csv}")
     print(f"Wrote {summary_csv}")
     print(f"Wrote {summary_md}")
@@ -469,6 +496,8 @@ def main() -> None:
     print(f"Wrote {semantics_family_md}")
     print(f"Wrote {definition_detail_csv}")
     print(f"Wrote {definition_summary_md}")
+    print(f"Wrote {zone_partition_csv}")
+    print(f"Wrote {zone_partition_md}")
 
 
 if __name__ == "__main__":

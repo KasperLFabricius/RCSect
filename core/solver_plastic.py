@@ -232,27 +232,32 @@ class PlasticSolver:
         intersection_x = y_na_solution / sin_a if abs(sin_a) > 1e-6 else float('inf')
 
         # [cite_start]3. Maximum Strains [cite: 761]
-        max_concrete_strain = kappa * (self.y_top - y_na_solution) * 1000.0  # per mille
+        internal_concrete_strain = kappa * (self.y_top - y_na_solution) * 1000.0  # per mille
+        max_concrete_strain = internal_concrete_strain  # already compression-positive internally
 
         # Direct legacy-style reconstruction:
         # governing bar per family = bar with largest absolute force magnitude.
         mild_gov = _governing_bar_by_force(forces_data['mild_bar_details'])
         pre_gov = _governing_bar_by_force(forces_data['prestressed_bar_details'])
 
-        max_mild_strain = float(mild_gov['strain_total'] * 1000.0) if mild_gov is not None else 0.0
-        max_prestressed_strain = float(pre_gov['strain_total'] * 1000.0) if pre_gov is not None else None
+        internal_mild_strain = float(mild_gov['strain_total'] * 1000.0) if mild_gov is not None else 0.0
+        internal_prestressed_strain = float(pre_gov['strain_total'] * 1000.0) if pre_gov is not None else None
+        # Legacy PCROSS printed convention: compression positive, tension negative.
+        max_mild_strain = -internal_mild_strain
+        max_prestressed_strain = (-internal_prestressed_strain) if internal_prestressed_strain is not None else None
 
         # [cite_start]4. Lever Arm Calculations [cite: 762, 763, 773, 784]
         # Compression resultant centroid is force-weighted over:
         # concrete compression + compression mild + compression prestress.
         # Tension resultant centroid is force-weighted over:
         # tension mild + tension prestress.
-        c_comp = forces_data['centroid_compression']
-        c_tens = forces_data['centroid_tension']
+        # Legacy output reconstruction uses zone-based centroids.
+        c_comp = {'x': forces_data.get('zone_comp_centroid_x'), 'y': forces_data.get('zone_comp_centroid_y')}
+        c_tens = {'x': forces_data.get('zone_tens_centroid_x'), 'y': forces_data.get('zone_tens_centroid_y')}
 
-        # Geometric internal-arm vector is tension minus compression centroid.
-        dx_arm_rot = c_tens['x'] - c_comp['x'] if c_tens['x'] is not None else 0.0
-        dy_arm_rot = c_tens['y'] - c_comp['y'] if c_tens['y'] is not None else 0.0
+        # Geometric internal-arm vector is tension-zone minus compression-zone centroid.
+        dx_arm_rot = c_tens['x'] - c_comp['x'] if (c_tens['x'] is not None and c_comp['x'] is not None) else 0.0
+        dy_arm_rot = c_tens['y'] - c_comp['y'] if (c_tens['y'] is not None and c_comp['y'] is not None) else 0.0
         # Legacy PCROSS benchmark sign convention stores DX/DY with opposite sign.
         DX_rot = -dx_arm_rot
         DY_rot = -dy_arm_rot
@@ -264,9 +269,9 @@ class PlasticSolver:
         # COMPRESS FORCE per legacy decomposition (positive magnitude):
         # concrete compression + compression mild + compression prestress.
         comp_force = float(
-            forces_data['concrete_compression']
-            + forces_data['compression_mild']
-            + forces_data['compression_prestress']
+            forces_data['zone_compression_concrete']
+            + forces_data['zone_compression_mild']
+            + forces_data['zone_compression_prestress']
         )
         
         # [cite_start]5. Safety Warnings [cite: 766, 767]
@@ -295,11 +300,14 @@ class PlasticSolver:
             "strain_concrete": max_concrete_strain,
             "strain_mild": max_mild_strain,
             "strain_prestressed": max_prestressed_strain,
+            "internal_strain_concrete": internal_concrete_strain,
+            "internal_strain_mild": internal_mild_strain,
+            "internal_strain_prestressed": internal_prestressed_strain,
             "compress_force": comp_force,
-            "compress_force_concrete": float(forces_data['concrete_compression']),
-            "compress_force_mild": float(forces_data['compression_mild']),
-            "compress_force_prestressed": float(forces_data['compression_prestress']),
-            "compress_force_total": comp_force,
+            "compress_zone_force_concrete": float(forces_data['zone_compression_concrete']),
+            "compress_zone_force_mild": float(forces_data['zone_compression_mild']),
+            "compress_zone_force_prestressed": float(forces_data['zone_compression_prestress']),
+            "compress_zone_force_total": comp_force,
             "lever_L": L,
             "lever_DX": DX_global,
             "lever_DY": DY_global,
@@ -313,18 +321,24 @@ class PlasticSolver:
                 "comp_centroid_y": forces_data.get("comp_centroid_y"),
                 "tens_centroid_x": forces_data.get("tens_centroid_x"),
                 "tens_centroid_y": forces_data.get("tens_centroid_y"),
+                "compress_zone_centroid_x": forces_data.get("zone_comp_centroid_x"),
+                "compress_zone_centroid_y": forces_data.get("zone_comp_centroid_y"),
+                "tension_zone_centroid_x": forces_data.get("zone_tens_centroid_x"),
+                "tension_zone_centroid_y": forces_data.get("zone_tens_centroid_y"),
             },
             "debug_strain_candidates": {
                 "strain_mild_max_tension_permille": max(forces_data['mild_strains_total_permille']) if forces_data['mild_strains_total_permille'] else None,
                 "strain_mild_max_compression_permille": min(forces_data['mild_strains_total_permille']) if forces_data['mild_strains_total_permille'] else None,
                 "strain_mild_governing_abs_permille": _max_by_abs(forces_data['mild_strains_total_permille']),
                 "strain_mild_governing_force_bar_id": mild_gov.get('id') if mild_gov is not None else None,
-                "strain_mild_governing_force_bar_strain_permille": float(mild_gov['strain_total'] * 1000.0) if mild_gov is not None else None,
+                "strain_mild_governing_force_bar_internal_strain_permille": float(mild_gov['strain_total'] * 1000.0) if mild_gov is not None else None,
+                "strain_mild_governing_force_bar_reported_legacy_permille": (-float(mild_gov['strain_total'] * 1000.0)) if mild_gov is not None else None,
                 "strain_prestressed_max_tension_permille": max(forces_data['prestressed_strains_total_permille']) if forces_data['prestressed_strains_total_permille'] else None,
                 "strain_prestressed_max_compression_permille": min(forces_data['prestressed_strains_total_permille']) if forces_data['prestressed_strains_total_permille'] else None,
                 "strain_prestressed_governing_abs_permille": _max_by_abs(forces_data['prestressed_strains_total_permille']),
                 "strain_prestressed_governing_force_bar_id": pre_gov.get('id') if pre_gov is not None else None,
-                "strain_prestressed_governing_force_bar_strain_permille": float(pre_gov['strain_total'] * 1000.0) if pre_gov is not None else None,
+                "strain_prestressed_governing_force_bar_internal_strain_permille": float(pre_gov['strain_total'] * 1000.0) if pre_gov is not None else None,
+                "strain_prestressed_governing_force_bar_reported_legacy_permille": (-float(pre_gov['strain_total'] * 1000.0)) if pre_gov is not None else None,
             },
         }
 
@@ -415,6 +429,19 @@ class PlasticSolver:
         sum_x_tens, sum_y_tens = 0.0, 0.0
         sum_x_conc_comp, sum_y_conc_comp = 0.0, 0.0
 
+        # Zone-based partitions (legacy output reconstruction):
+        # compression/tension zone classification is geometric (relative to NA/strain field),
+        # not based on force sign.
+        zone_comp_force = 0.0
+        zone_tens_force = 0.0
+        zone_comp_conc = 0.0
+        zone_comp_mild = 0.0
+        zone_comp_prestress = 0.0
+        zone_tens_mild = 0.0
+        zone_tens_prestress = 0.0
+        sum_x_zone_comp, sum_y_zone_comp = 0.0, 0.0
+        sum_x_zone_tens, sum_y_zone_tens = 0.0, 0.0
+
         mild_bar_rows = []
         prestressed_bar_rows = []
 
@@ -447,6 +474,23 @@ class PlasticSolver:
                 tens_mild_force += force
                 sum_x_tens += force * bar['x']
                 sum_y_tens += force * bar['y']
+
+            # Geometric zone by solved strain field at bar location.
+            if eps < 0.0:
+                # Zone-based compression contribution uses compression-positive sign.
+                zf = -force
+                zone_comp_mild += zf
+                w = abs(zf)
+                zone_comp_force += w
+                sum_x_zone_comp += w * bar['x']
+                sum_y_zone_comp += w * bar['y']
+            else:
+                zf = force
+                zone_tens_mild += zf
+                w = abs(zf)
+                zone_tens_force += w
+                sum_x_zone_tens += w * bar['x']
+                sum_y_zone_tens += w * bar['y']
 
             mild_bar_rows.append(
                 {
@@ -485,6 +529,22 @@ class PlasticSolver:
                     sum_x_tens += force * bar['x']
                     sum_y_tens += force * bar['y']
 
+                # Geometric zone classification for prestress bars uses incremental (section) strain sign.
+                if geometric_eps < 0.0:
+                    zf = -force
+                    zone_comp_prestress += zf
+                    w = abs(zf)
+                    zone_comp_force += w
+                    sum_x_zone_comp += w * bar['x']
+                    sum_y_zone_comp += w * bar['y']
+                else:
+                    zf = force
+                    zone_tens_prestress += zf
+                    w = abs(zf)
+                    zone_tens_force += w
+                    sum_x_zone_tens += w * bar['x']
+                    sum_y_zone_tens += w * bar['y']
+
                 prestressed_bar_rows.append(
                     {
                         'id': bar.get('id'),
@@ -522,6 +582,10 @@ class PlasticSolver:
             sum_y_comp += abs_f * centroid.y
             sum_x_conc_comp += abs_f * centroid.x
             sum_y_conc_comp += abs_f * centroid.y
+            zone_comp_force += abs_f
+            zone_comp_conc += abs_f
+            sum_x_zone_comp += abs_f * centroid.x
+            sum_y_zone_comp += abs_f * centroid.y
             
         if poly_parabola is not None and not poly_parabola.is_empty:
             F_p, Mxp_p, Myp_p, cx, cy = self._integrate_parabola(poly_parabola, y_na, kappa)
@@ -537,6 +601,10 @@ class PlasticSolver:
             sum_y_comp += abs_f * cy
             sum_x_conc_comp += abs_f * cx
             sum_y_conc_comp += abs_f * cy
+            zone_comp_force += abs_f
+            zone_comp_conc += abs_f
+            sum_x_zone_comp += abs_f * cx
+            sum_y_zone_comp += abs_f * cy
 
         # Centroid Resolutions
         c_comp = {'x': sum_x_comp / total_compression if total_compression > 0 else 0.0,
@@ -545,6 +613,10 @@ class PlasticSolver:
                        'y': sum_y_conc_comp / conc_comp_force if conc_comp_force > 0 else None}
         c_tens = {'x': sum_x_tens / total_tension if total_tension > 0 else None,
                   'y': sum_y_tens / total_tension if total_tension > 0 else None}
+        c_zone_comp = {'x': sum_x_zone_comp / zone_comp_force if zone_comp_force > 0 else None,
+                       'y': sum_y_zone_comp / zone_comp_force if zone_comp_force > 0 else None}
+        c_zone_tens = {'x': sum_x_zone_tens / zone_tens_force if zone_tens_force > 0 else None,
+                       'y': sum_y_zone_tens / zone_tens_force if zone_tens_force > 0 else None}
 
         return {
             'N_tot': N_tot,
@@ -558,6 +630,13 @@ class PlasticSolver:
             'compression_rebar_force': comp_rebar_force,
             'tension_mild': tens_mild_force,
             'tension_prestress': tens_prestress_force,
+            'zone_compression_total': zone_comp_force,
+            'zone_tension_total': zone_tens_force,
+            'zone_compression_concrete': zone_comp_conc,
+            'zone_compression_mild': zone_comp_mild,
+            'zone_compression_prestress': zone_comp_prestress,
+            'zone_tension_mild': zone_tens_mild,
+            'zone_tension_prestress': zone_tens_prestress,
             'centroid_concrete_compression': c_conc_comp,
             'centroid_compression': c_comp,
             'centroid_tension': c_tens,
@@ -565,6 +644,10 @@ class PlasticSolver:
             'comp_centroid_y': c_comp['y'] if total_compression > 0 else None,
             'tens_centroid_x': c_tens['x'],
             'tens_centroid_y': c_tens['y'],
+            'zone_comp_centroid_x': c_zone_comp['x'],
+            'zone_comp_centroid_y': c_zone_comp['y'],
+            'zone_tens_centroid_x': c_zone_tens['x'],
+            'zone_tens_centroid_y': c_zone_tens['y'],
             'mild_bar_details': mild_bar_rows,
             'prestressed_bar_details': prestressed_bar_rows,
             'mild_strains_total_permille': [float(r['strain_total'] * 1000.0) for r in mild_bar_rows],

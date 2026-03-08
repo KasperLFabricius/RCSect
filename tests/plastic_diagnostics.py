@@ -788,3 +788,78 @@ def run_output_definition_study() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFr
 
     winners = pd.DataFrame(winner_rows).sort_values(["output", "fixture_family"]).reset_index(drop=True)
     return detail, summary, winners
+
+
+
+def run_zone_partition_study() -> pd.DataFrame:
+    from tests.benchmark_compare import BenchmarkSweepSpec
+
+    rows = []
+    for key, case in EMBEDDED_BENCHMARK_CASES.items():
+        family = (
+            "tbeam" if case.load_case in (3, 4)
+            else "snit" if case.load_case in (101, 102, 103, 104)
+            else "annular"
+        )
+        refs = case.reference_rows
+        solver = case.solver_builder()
+        spec = BenchmarkSweepSpec(load_case=case.load_case, p_target=case.load.P_target, angles_deg=case.load.angles_deg)
+        solved = solver.solve_angle_sweep(spec.angles_deg, spec.p_target)
+        by_angle = {float(r["angle_v_deg"]): r for r in solved}
+        for angle in spec.angles_deg:
+            a = float(angle)
+            row = by_angle[a]
+            ref = refs.get((spec.load_case, a), None)
+            if ref is None:
+                continue
+            dbg = row.get("debug_force_components") or {}
+            # force-sign based
+            sign_comp = float(dbg.get("concrete_compression", np.nan) + dbg.get("compression_mild", np.nan) + dbg.get("compression_prestress", np.nan))
+            # zone-based
+            zone_comp = float(row.get("compress_zone_force_total", np.nan))
+
+            dx_sign = float(row.get("debug_resultant_centroids", {}).get("comp_centroid_x", np.nan))
+            dy_sign = float(row.get("debug_resultant_centroids", {}).get("comp_centroid_y", np.nan))
+            dx_t_sign = float(row.get("debug_resultant_centroids", {}).get("tens_centroid_x", np.nan))
+            dy_t_sign = float(row.get("debug_resultant_centroids", {}).get("tens_centroid_y", np.nan))
+            dx_sign_val = (dx_t_sign - dx_sign) if np.isfinite(dx_sign) and np.isfinite(dx_t_sign) else np.nan
+            dy_sign_val = (dy_t_sign - dy_sign) if np.isfinite(dy_sign) and np.isfinite(dy_t_sign) else np.nan
+
+            dz = row.get("debug_resultant_centroids", {})
+            dx_zone_raw = dz.get("tension_zone_centroid_x", np.nan)
+            dy_zone_raw = dz.get("tension_zone_centroid_y", np.nan)
+            dx_c_zone_raw = dz.get("compress_zone_centroid_x", np.nan)
+            dy_c_zone_raw = dz.get("compress_zone_centroid_y", np.nan)
+            dx_zone = float(dx_zone_raw) if dx_zone_raw is not None else np.nan
+            dy_zone = float(dy_zone_raw) if dy_zone_raw is not None else np.nan
+            dx_c_zone = float(dx_c_zone_raw) if dx_c_zone_raw is not None else np.nan
+            dy_c_zone = float(dy_c_zone_raw) if dy_c_zone_raw is not None else np.nan
+            dx_zone_val = (dx_zone - dx_c_zone) if np.isfinite(dx_zone) and np.isfinite(dx_c_zone) else np.nan
+            dy_zone_val = (dy_zone - dy_c_zone) if np.isfinite(dy_zone) and np.isfinite(dy_c_zone) else np.nan
+
+            rows.append({
+                "fixture": key,
+                "fixture_family": family,
+                "load_case": spec.load_case,
+                "V_deg": a,
+                "compress_force_ref": float(ref.get("compress_force", np.nan)),
+                "compress_force_force_sign": sign_comp,
+                "compress_force_zone": zone_comp,
+                "compress_force_reported": float(row.get("compress_force", np.nan)),
+                "compress_force_zone_rel_error": _safe_rel_err(zone_comp, float(ref.get("compress_force", np.nan))),
+                "compress_force_force_sign_rel_error": _safe_rel_err(sign_comp, float(ref.get("compress_force", np.nan))),
+                "DX_ref": float(ref.get("lever_DX", ref.get("DX", np.nan))),
+                "DY_ref": float(ref.get("lever_DY", ref.get("DY", np.nan))),
+                "DX_force_sign": dx_sign_val,
+                "DY_force_sign": dy_sign_val,
+                "DX_zone": dx_zone_val,
+                "DY_zone": dy_zone_val,
+                "DX_reported": float(row.get("lever_DX", np.nan)),
+                "DY_reported": float(row.get("lever_DY", np.nan)),
+                "DX_zone_rel_error": _safe_rel_err(dx_zone_val, float(ref.get("lever_DX", ref.get("DX", np.nan)))),
+                "DY_zone_rel_error": _safe_rel_err(dy_zone_val, float(ref.get("lever_DY", ref.get("DY", np.nan)))),
+                "DX_force_sign_rel_error": _safe_rel_err(dx_sign_val, float(ref.get("lever_DX", ref.get("DX", np.nan)))),
+                "DY_force_sign_rel_error": _safe_rel_err(dy_sign_val, float(ref.get("lever_DY", ref.get("DY", np.nan)))),
+            })
+
+    return pd.DataFrame(rows).sort_values(["load_case", "V_deg"]).reset_index(drop=True)

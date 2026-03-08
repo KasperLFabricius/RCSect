@@ -251,11 +251,11 @@ def test_compress_force_is_direct_sum_of_compression_partitions():
     case = EMBEDDED_BENCHMARK_CASES["snit_a"]
     result = case.solver_builder().solve(angle_v_deg=90.0, P_target=case.load.P_target)
 
-    comp_total = result["compress_force_total"]
+    comp_total = result["compress_zone_force_total"]
     comp_parts = (
-        result["compress_force_concrete"]
-        + result["compress_force_mild"]
-        + result["compress_force_prestressed"]
+        result["compress_zone_force_concrete"]
+        + result["compress_zone_force_mild"]
+        + result["compress_zone_force_prestressed"]
     )
     assert np.isclose(comp_total, comp_parts, rtol=0.0, atol=1e-9)
     assert np.isclose(result["compress_force"], comp_total, rtol=0.0, atol=1e-9)
@@ -267,8 +267,8 @@ def test_lever_arm_is_centroid_vector_and_not_m_over_compress_override():
     result = case.solver_builder().solve(angle_v_deg=angle, P_target=case.load.P_target)
 
     c = result["debug_resultant_centroids"]
-    dx_local = c["tens_centroid_x"] - c["comp_centroid_x"]
-    dy_local = c["tens_centroid_y"] - c["comp_centroid_y"]
+    dx_local = c["tension_zone_centroid_x"] - c["compress_zone_centroid_x"]
+    dy_local = c["tension_zone_centroid_y"] - c["compress_zone_centroid_y"]
 
     angle_rad = np.radians(case.solver_builder().cs.local_rotation_deg(angle))
     cos_a = np.cos(angle_rad)
@@ -294,9 +294,9 @@ def test_strain_outputs_follow_governing_force_bars_with_total_strain():
 
     mild = max(dbg["mild_bar_details"], key=lambda r: abs(r["force_kN"]))
     assert sc["strain_mild_governing_force_bar_id"] == mild["id"]
-    assert np.isclose(result["strain_mild"], mild["strain_total"] * 1000.0, rtol=0.0, atol=1e-9)
+    assert np.isclose(result["strain_mild"], -mild["strain_total"] * 1000.0, rtol=0.0, atol=1e-9)
 
     prest = max(dbg["prestressed_bar_details"], key=lambda r: abs(r["force_kN"]))
     assert sc["strain_prestressed_governing_force_bar_id"] == prest["id"]
-    assert np.isclose(result["strain_prestressed"], prest["strain_total"] * 1000.0, rtol=0.0, atol=1e-9)
+    assert np.isclose(result["strain_prestressed"], -prest["strain_total"] * 1000.0, rtol=0.0, atol=1e-9)
     assert not np.isclose(result["strain_prestressed"], prest["strain_incremental"] * 1000.0, rtol=0.0, atol=1e-6)
