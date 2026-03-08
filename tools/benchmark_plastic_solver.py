@@ -31,6 +31,8 @@ from tests.plastic_diagnostics import (
     run_annular_dxdy_sign_focus_study,
     run_tbeam_constitutive_audit,
     run_tbeam_constitutive_variant_study,
+    run_tbeam_branch_audit,
+    run_tbeam_type1_interpretation_study,
 )
 
 
@@ -308,6 +310,8 @@ def main() -> None:
     annular_dxdy_detail, annular_dxdy_summary = run_annular_dxdy_sign_focus_study()
     tbeam_constitutive_detail, tbeam_constitutive_summary = run_tbeam_constitutive_audit()
     tbeam_variant = run_tbeam_constitutive_variant_study()
+    tbeam_branch_detail, tbeam_branch_summary = run_tbeam_branch_audit()
+    tbeam_type1 = run_tbeam_type1_interpretation_study()
     zone_partition = run_zone_partition_study()
     semantic_winners = choose_semantic_winners(semantics_summary)
     family_winners = choose_semantic_winners_by_family(semantics_summary)
@@ -342,6 +346,10 @@ def main() -> None:
     tbeam_constitutive_csv = out_dir / "plastic_tbeam_constitutive_audit.csv"
     tbeam_constitutive_md = out_dir / "plastic_tbeam_constitutive_audit_summary.md"
     tbeam_variant_csv = out_dir / "plastic_tbeam_constitutive_variant_study.csv"
+    tbeam_branch_csv = out_dir / "plastic_tbeam_branch_audit.csv"
+    tbeam_branch_md = out_dir / "plastic_tbeam_branch_audit_summary.md"
+    tbeam_type1_csv = out_dir / "plastic_tbeam_type1_interpretation_study.csv"
+    tbeam_type1_md = out_dir / "plastic_tbeam_type1_interpretation_summary.md"
 
     legacy_shift_csv = out_dir / "plastic_legacy_shift.csv"
     legacy_shift_md = out_dir / "plastic_legacy_shift_summary.md"
@@ -384,6 +392,8 @@ def main() -> None:
     annular_dxdy_detail.to_csv(annular_dxdy_csv, index=False)
     tbeam_constitutive_detail.to_csv(tbeam_constitutive_csv, index=False)
     tbeam_variant.to_csv(tbeam_variant_csv, index=False)
+    tbeam_branch_detail.to_csv(tbeam_branch_csv, index=False)
+    tbeam_type1.to_csv(tbeam_type1_csv, index=False)
 
     referenced = detail[detail["Mx_ref"].notna()][
         [
@@ -463,6 +473,16 @@ def main() -> None:
     md_tbeam += "## Row-level best gaps\n\n" + _markdown_table(tbeam_constitutive_summary) + "\n\n"
     md_tbeam += "## Narrow constitutive variant study\n\n" + _markdown_table(tbeam_variant) + "\n"
     tbeam_constitutive_md.write_text(md_tbeam)
+
+    md_branch = "# T-beam Branch Audit\n\n"
+    md_branch += "Checks whether non-selected admissible roots improve internal-state fit (kappa/compress_force/strains) without sacrificing moments.\n\n"
+    md_branch += "## Row summary\n\n" + _markdown_table(tbeam_branch_summary) + "\n"
+    tbeam_branch_md.write_text(md_branch)
+
+    md_type1 = "# T-beam PrestressedSteelType1 Interpretation Study\n\n"
+    md_type1 += "COMPRESS FORCE is not the focus here; this isolates type-1 prestress interpretation on T-beam rows only.\n\n"
+    md_type1 += _markdown_table(tbeam_type1) + "\n"
+    tbeam_type1_md.write_text(md_type1)
 
     prior_mx, prior_my = _max_rel_errors(prior_summary)
     cur_mx, cur_my = _max_rel_errors(summary)

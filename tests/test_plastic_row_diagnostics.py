@@ -15,6 +15,8 @@ from tests.plastic_diagnostics import (
     run_annular_dxdy_sign_focus_study,
     run_tbeam_constitutive_audit,
     run_tbeam_constitutive_variant_study,
+    run_tbeam_branch_audit,
+    run_tbeam_type1_interpretation_study,
 )
 
 
@@ -317,3 +319,25 @@ def test_tbeam_constitutive_audit_and_variant_study_artifacts_are_available():
     assert {"best_mild_gap_total", "best_mild_gap_legacy", "best_prestress_gap_total", "best_prestress_gap_incremental"}.issubset(audit_summary.columns)
     assert {"variant", "max_rel_err_strain_mild", "max_rel_err_strain_prestressed", "max_rel_err_Mx", "max_rel_err_kappa"}.issubset(variants.columns)
     assert "baseline" in set(variants["variant"])
+
+
+def test_tbeam_branch_audit_reports_selected_vs_best_internal_state_candidates():
+    detail, summary = run_tbeam_branch_audit()
+    assert not detail.empty
+    assert not summary.empty
+    assert {"candidate_index", "is_selected", "moment_fit_error", "state_fit_error", "selection_source"}.issubset(detail.columns)
+    assert {"best_moment_candidate_index", "best_state_candidate_index", "selected_equals_best_state"}.issubset(summary.columns)
+    # Ensure this is a genuine branch audit (at least one multi-candidate row exists).
+    assert detail.groupby(["load_case", "V_deg"]).size().max() >= 2
+
+
+def test_tbeam_type1_interpretation_study_is_reproducible_and_ranked():
+    df = run_tbeam_type1_interpretation_study()
+    assert not df.empty
+    assert set(df["variant"]) == {
+        "A_current_total_strain_on_curve",
+        "B_initial_stress_offset_plus_incremental_E",
+        "C_shifted_strain_origin_relative_curve",
+        "D_hybrid_curve_plus_incremental_cap",
+    }
+    assert {"max_rel_err_strain_mild", "max_rel_err_strain_prestressed", "max_rel_err_kappa", "max_rel_err_compress_force", "max_rel_err_Mx", "max_rel_err_My"}.issubset(df.columns)

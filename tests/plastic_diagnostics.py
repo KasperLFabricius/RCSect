@@ -1571,3 +1571,163 @@ def run_tbeam_constitutive_variant_study() -> pd.DataFrame:
     ]:
         out[f"delta_vs_baseline_{c}"] = out[c] - float(base[c])
     return out
+
+
+
+def run_tbeam_branch_audit() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Audit all admissible branches on the six T-beam benchmark rows."""
+    rows = []
+    solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
+
+    for lc, angle in DIAGNOSTIC_ROWS:
+        a = float(angle)
+        p_target = _case_target(int(lc))
+        selected = solver.solve(a, p_target)
+        candidates = solver._solve_candidates(a, p_target)
+        ref_mm = MANUAL_ROWS[(int(lc), a)]
+        ref_diag = MANUAL_ROW_DIAGNOSTICS[(int(lc), a)]
+
+        for idx, cand in enumerate(candidates):
+            moment_err = max(
+                _safe_rel_err(float(cand.get("Mx", np.nan)), float(ref_mm["Mx"])),
+                _safe_rel_err(float(cand.get("My", np.nan)), float(ref_mm["My"])),
+            )
+            state_err = np.nanmax(
+                [
+                    _safe_rel_err(float(cand.get("kappa", np.nan)), float(ref_diag["kappa"])),
+                    _safe_rel_err(float(cand.get("compress_force", np.nan)), float(ref_diag["compress_force"])),
+                    _safe_rel_err(float(cand.get("strain_mild", np.nan)), _to_permille_ref(ref_diag.get("strain_mild"))),
+                    _safe_rel_err(float(cand.get("strain_prestressed", np.nan)), _to_permille_ref(ref_diag.get("strain_prestressed"))),
+                ]
+            )
+            rows.append(
+                {
+                    "load_case": int(lc),
+                    "V_deg": a,
+                    "candidate_index": idx,
+                    "is_selected": bool(cand.get("pivot") == selected.get("pivot")),
+                    "pivot": cand.get("pivot"),
+                    "y_na": float(cand.get("y_na", np.nan)),
+                    "kappa": float(cand.get("kappa", np.nan)),
+                    "Mx": float(cand.get("Mx", np.nan)),
+                    "My": float(cand.get("My", np.nan)),
+                    "compress_force": float(cand.get("compress_force", np.nan)),
+                    "strain_concrete": float(cand.get("strain_concrete", np.nan)),
+                    "strain_mild": float(cand.get("strain_mild", np.nan)),
+                    "strain_prestressed": float(cand.get("strain_prestressed", np.nan)),
+                    "candidate_count": int(selected.get("candidate_count", len(candidates))),
+                    "selected_candidate_index": int(selected.get("selected_candidate_index", -1)),
+                    "selection_source": selected.get("selection_source"),
+                    "moment_fit_error": float(moment_err),
+                    "state_fit_error": float(state_err),
+                }
+            )
+
+    detail = pd.DataFrame(rows).sort_values(["load_case", "V_deg", "candidate_index"]).reset_index(drop=True)
+
+    summary_rows = []
+    for (lc, a), grp in detail.groupby(["load_case", "V_deg"]):
+        best_m = grp.sort_values(["moment_fit_error", "state_fit_error"]).iloc[0]
+        best_s = grp.sort_values(["state_fit_error", "moment_fit_error"]).iloc[0]
+        summary_rows.append(
+            {
+                "load_case": int(lc),
+                "V_deg": float(a),
+                "selected_candidate_index": int(grp["selected_candidate_index"].iloc[0]),
+                "best_moment_candidate_index": int(best_m["candidate_index"]),
+                "best_state_candidate_index": int(best_s["candidate_index"]),
+                "best_moment_error": float(best_m["moment_fit_error"]),
+                "best_state_error": float(best_s["state_fit_error"]),
+                "same_candidate_for_moment_and_state": bool(int(best_m["candidate_index"]) == int(best_s["candidate_index"])),
+                "selected_equals_best_state": bool(int(grp["selected_candidate_index"].iloc[0]) == int(best_s["candidate_index"])),
+            }
+        )
+
+    summary = pd.DataFrame(summary_rows).sort_values(["load_case", "V_deg"]).reset_index(drop=True)
+    return detail, summary
+
+
+def _type1_curve_sigma(ps, eps_total: np.ndarray) -> np.ndarray:
+    eps_arr = np.asarray(eps_total, dtype=float)
+    e_pct = 100.0 * eps_arr
+    sigma = np.zeros_like(eps_arr, dtype=float)
+    mask1 = (e_pct >= 0.0) & (e_pct < 0.6)
+    sigma[mask1] = (2000.0 * e_pct[mask1]) / ps.gamma_y
+    mask2 = (e_pct >= 0.6) & (e_pct < 1.0)
+    e = e_pct[mask2]
+    sigma[mask2] = (-2500.0 * e**2 + 5000.0 * e - 900.0) / ps.gamma_y
+    mask3 = (e_pct >= 1.0) & (e_pct < 1.75)
+    sigma[mask3] = (60.0 * e_pct[mask3] + 1540.0) / ps.gamma_y
+    mask4 = (e_pct >= 1.75) & (e_pct <= ps.RES_PCT)
+    sigma[mask4] = 1645.0 / ps.gamma_y
+    return sigma
+
+
+def run_tbeam_type1_interpretation_study() -> pd.DataFrame:
+    """Benchmark-only PrestressedSteelType1 interpretation variants on T-beam rows."""
+    variants = [
+        "A_current_total_strain_on_curve",
+        "B_initial_stress_offset_plus_incremental_E",
+        "C_shifted_strain_origin_relative_curve",
+        "D_hybrid_curve_plus_incremental_cap",
+    ]
+
+    rows = []
+    for variant in variants:
+        solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
+        ps = solver.prestressed_steel
+        eps0 = float(ps.initial_strain)
+        sigma0 = float(_type1_curve_sigma(ps, np.asarray([eps0]))[0])
+        sigma_cap = 1645.0 / ps.gamma_y
+
+        if variant != "A_current_total_strain_on_curve":
+            def stress_variant(total_eps):
+                et = np.asarray(total_eps, dtype=float)
+                inc = et - eps0
+                if variant == "B_initial_stress_offset_plus_incremental_E":
+                    sigma = sigma0 + ps.E_p * inc
+                    return np.clip(sigma, 0.0, sigma_cap)
+                if variant == "C_shifted_strain_origin_relative_curve":
+                    sigma_rel = _type1_curve_sigma(ps, np.maximum(inc, 0.0))
+                    return np.clip(sigma0 + sigma_rel, 0.0, sigma_cap)
+                # D hybrid
+                sigma_curve = _type1_curve_sigma(ps, et)
+                sigma_inc = sigma0 + 0.5 * ps.E_p * inc
+                return np.clip(0.5 * sigma_curve + 0.5 * sigma_inc, 0.0, sigma_cap)
+
+            ps.stress = stress_variant
+
+        rel_mx = []
+        rel_my = []
+        rel_kappa = []
+        rel_cf = []
+        rel_sm = []
+        rel_sp = []
+        for lc, ang in DIAGNOSTIC_ROWS:
+            solved = solver.solve(float(ang), _case_target(int(lc)))
+            ref_mm = MANUAL_ROWS[(int(lc), float(ang))]
+            ref_diag = MANUAL_ROW_DIAGNOSTICS[(int(lc), float(ang))]
+            rel_mx.append(_safe_rel_err(float(solved.get("Mx", np.nan)), float(ref_mm["Mx"])))
+            rel_my.append(_safe_rel_err(float(solved.get("My", np.nan)), float(ref_mm["My"])))
+            rel_kappa.append(_safe_rel_err(float(solved.get("kappa", np.nan)), float(ref_diag["kappa"])))
+            rel_cf.append(_safe_rel_err(float(solved.get("compress_force", np.nan)), float(ref_diag["compress_force"])))
+            rel_sm.append(_safe_rel_err(float(solved.get("strain_mild", np.nan)), _to_permille_ref(ref_diag.get("strain_mild"))))
+            rel_sp.append(_safe_rel_err(float(solved.get("strain_prestressed", np.nan)), _to_permille_ref(ref_diag.get("strain_prestressed"))))
+
+        rows.append(
+            {
+                "variant": variant,
+                "max_rel_err_strain_mild": float(np.nanmax(rel_sm)),
+                "max_rel_err_strain_prestressed": float(np.nanmax(rel_sp)),
+                "max_rel_err_kappa": float(np.nanmax(rel_kappa)),
+                "max_rel_err_compress_force": float(np.nanmax(rel_cf)),
+                "max_rel_err_Mx": float(np.nanmax(rel_mx)),
+                "max_rel_err_My": float(np.nanmax(rel_my)),
+            }
+        )
+
+    out = pd.DataFrame(rows).sort_values("variant").reset_index(drop=True)
+    base = out[out["variant"] == "A_current_total_strain_on_curve"].iloc[0]
+    for c in ["max_rel_err_strain_mild","max_rel_err_strain_prestressed","max_rel_err_kappa","max_rel_err_compress_force","max_rel_err_Mx","max_rel_err_My"]:
+        out[f"delta_vs_baseline_{c}"] = out[c] - float(base[c])
+    return out
