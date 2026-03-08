@@ -33,6 +33,8 @@ from tests.plastic_diagnostics import (
     run_tbeam_constitutive_variant_study,
     run_tbeam_branch_audit,
     run_tbeam_type1_interpretation_study,
+    run_tbeam_reported_strain_study,
+    run_annular_dxdy_definition_study,
 )
 
 
@@ -312,6 +314,8 @@ def main() -> None:
     tbeam_variant = run_tbeam_constitutive_variant_study()
     tbeam_branch_detail, tbeam_branch_summary = run_tbeam_branch_audit()
     tbeam_type1 = run_tbeam_type1_interpretation_study()
+    tbeam_reported_strain_detail, tbeam_reported_strain_summary = run_tbeam_reported_strain_study()
+    annular_dxdy_def_detail, annular_dxdy_def_summary = run_annular_dxdy_definition_study()
     zone_partition = run_zone_partition_study()
     semantic_winners = choose_semantic_winners(semantics_summary)
     family_winners = choose_semantic_winners_by_family(semantics_summary)
@@ -350,6 +354,10 @@ def main() -> None:
     tbeam_branch_md = out_dir / "plastic_tbeam_branch_audit_summary.md"
     tbeam_type1_csv = out_dir / "plastic_tbeam_type1_interpretation_study.csv"
     tbeam_type1_md = out_dir / "plastic_tbeam_type1_interpretation_summary.md"
+    tbeam_reported_strain_csv = out_dir / "plastic_tbeam_reported_strain_study.csv"
+    tbeam_reported_strain_md = out_dir / "plastic_tbeam_reported_strain_summary.md"
+    annular_dxdy_def_csv = out_dir / "plastic_annular_dxdy_study.csv"
+    annular_dxdy_def_md = out_dir / "plastic_annular_dxdy_summary.md"
 
     legacy_shift_csv = out_dir / "plastic_legacy_shift.csv"
     legacy_shift_md = out_dir / "plastic_legacy_shift_summary.md"
@@ -394,6 +402,8 @@ def main() -> None:
     tbeam_variant.to_csv(tbeam_variant_csv, index=False)
     tbeam_branch_detail.to_csv(tbeam_branch_csv, index=False)
     tbeam_type1.to_csv(tbeam_type1_csv, index=False)
+    tbeam_reported_strain_detail.to_csv(tbeam_reported_strain_csv, index=False)
+    annular_dxdy_def_detail.to_csv(annular_dxdy_def_csv, index=False)
 
     referenced = detail[detail["Mx_ref"].notna()][
         [
@@ -484,6 +494,16 @@ def main() -> None:
     md_type1 += _markdown_table(tbeam_type1) + "\n"
     tbeam_type1_md.write_text(md_type1)
 
+    md_tbeam_reported = "# T-beam Reported Strain Study\n\n"
+    md_tbeam_reported += "Focused PCROSS-native reported-output audit for T-beam strain fields only.\n\n"
+    md_tbeam_reported += "## Candidate summary\n\n" + _markdown_table(tbeam_reported_strain_summary) + "\n"
+    tbeam_reported_strain_md.write_text(md_tbeam_reported)
+
+    md_ann_def = "# Annular DX/DY Definition Study\n\n"
+    md_ann_def += "Focused annular-only candidate study for benchmark-facing DX/DY output definitions.\n\n"
+    md_ann_def += "## Candidate summary\n\n" + _markdown_table(annular_dxdy_def_summary) + "\n"
+    annular_dxdy_def_md.write_text(md_ann_def)
+
     prior_mx, prior_my = _max_rel_errors(prior_summary)
     cur_mx, cur_my = _max_rel_errors(summary)
     md += "\n## Error delta vs prior artifact\n\n"
@@ -568,6 +588,10 @@ def main() -> None:
     print(f"Wrote {definition_summary_md}")
     print(f"Wrote {zone_partition_csv}")
     print(f"Wrote {zone_partition_md}")
+    print(f"Wrote {tbeam_reported_strain_csv}")
+    print(f"Wrote {tbeam_reported_strain_md}")
+    print(f"Wrote {annular_dxdy_def_csv}")
+    print(f"Wrote {annular_dxdy_def_md}")
 
 
 if __name__ == "__main__":

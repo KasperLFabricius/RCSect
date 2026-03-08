@@ -51,7 +51,7 @@ snit_a,snit,101,90.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.847,-0.04
 snit_a,snit,101,90.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.0,-1.1256017418945813e-16,-1.1256017418945813e-16,0.00011256017418945814,
 snit_a,snit,101,90.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.847,0.045792128168745005,-0.801207871831255,0.9459360942517768,1.0
 snit_a,snit,101,90.0,lever_L,lever:centroid_concrete_to_tension:L,,0.847,0.045792128168745005,-0.801207871831255,0.9459360942517768,1.0
-snit_a,snit,101,90.0,lever_DX,lever:reported:DX,,0.0,-7.170748223651667e-17,-7.170748223651667e-17,7.170748223651667e-05,
+snit_a,snit,101,90.0,lever_DX,lever:reported:DX,,0.0,7.170748223651667e-17,7.170748223651667e-17,7.170748223651667e-05,
 snit_a,snit,101,90.0,lever_DY,lever:reported:DY,,0.847,0.8977451910461616,0.0507451910461616,0.05991167774045053,1.0
 snit_a,snit,101,90.0,lever_L,lever:reported:L,,0.847,0.8977451910461616,0.0507451910461616,0.05991167774045053,1.0
 snit_a,snit,101,90.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.847,0.40112807381581167,-0.4458719261841883,0.5264131359907772,1.0
@@ -132,7 +132,7 @@ snit_b,snit,102,90.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.705,-0.69
 snit_b,snit,102,90.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.0,-1.050522945554077e-16,-1.050522945554077e-16,0.0001050522945554077,
 snit_b,snit,102,90.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.705,0.6989024659200469,-0.00609753407995306,0.008648984510571717,1.0
 snit_b,snit,102,90.0,lever_L,lever:centroid_concrete_to_tension:L,,0.705,0.6989024659200469,-0.00609753407995306,0.008648984510571717,1.0
-snit_b,snit,102,90.0,lever_DX,lever:reported:DX,,0.0,-1.0136653969071949e-16,-1.0136653969071949e-16,0.00010136653969071949,
+snit_b,snit,102,90.0,lever_DX,lever:reported:DX,,0.0,1.0136653969071949e-16,1.0136653969071949e-16,0.00010136653969071949,
 snit_b,snit,102,90.0,lever_DY,lever:reported:DY,,0.705,0.7062104444352719,0.0012104444352719623,0.00171694246137867,1.0
 snit_b,snit,102,90.0,lever_L,lever:reported:L,,0.705,0.7062104444352719,0.0012104444352719623,0.00171694246137867,1.0
 snit_b,snit,102,90.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.705,0.5585308022738413,-0.14646919772615863,0.207757727271147,1.0
@@ -213,7 +213,7 @@ snit_c,snit,103,90.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.746,-0.61
 snit_c,snit,103,90.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.0,-1.0299433672164803e-16,-1.0299433672164803e-16,0.00010299433672164804,
 snit_c,snit,103,90.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.746,0.6169330805071933,-0.1290669194928067,0.17301195642467385,1.0
 snit_c,snit,103,90.0,lever_L,lever:centroid_concrete_to_tension:L,,0.746,0.6169330805071933,-0.1290669194928067,0.17301195642467385,1.0
-snit_c,snit,103,90.0,lever_DX,lever:reported:DX,,0.0,-8.872660627433818e-17,-8.872660627433818e-17,8.872660627433818e-05,
+snit_c,snit,103,90.0,lever_DX,lever:reported:DX,,0.0,8.872660627433818e-17,8.872660627433818e-17,8.872660627433818e-05,
 snit_c,snit,103,90.0,lever_DY,lever:reported:DY,,0.746,0.6937022813145406,-0.052297718685459404,0.07010418054351127,1.0
 snit_c,snit,103,90.0,lever_L,lever:reported:L,,0.746,0.6937022813145406,-0.052297718685459404,0.07010418054351127,1.0
 snit_c,snit,103,90.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.746,0.5724689681373754,-0.17353103186262464,0.23261532421263356,1.0
@@ -273,7 +273,7 @@ snit_c,snit,103,270.0,lever_DY,lever:centroid_concrete_to_tension:dy,,-0.484,-0.
 snit_c,snit,103,270.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.0,-1.2289965549316724e-16,-1.2289965549316724e-16,0.00012289965549316725,
 snit_c,snit,103,270.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,-0.484,0.18910176864751688,0.6731017686475169,1.3907061335692499,0.0
 snit_c,snit,103,270.0,lever_L,lever:centroid_concrete_to_tension:L,,0.484,0.18910176864751688,-0.2948982313524831,0.6092938664307502,1.0
-snit_c,snit,103,270.0,lever_DX,lever:reported:DX,,0.0,-2.0232048050683804e-17,-2.0232048050683804e-17,2.0232048050683805e-05,
+snit_c,snit,103,270.0,lever_DX,lever:reported:DX,,0.0,-1.0748498804273532e-16,-1.0748498804273532e-16,0.00010748498804273532,
 snit_c,snit,103,270.0,lever_DY,lever:reported:DY,,-0.484,-0.52144437148058,-0.03744437148058,0.07736440388549587,1.0
 snit_c,snit,103,270.0,lever_L,lever:reported:L,,0.484,0.52144437148058,0.03744437148058,0.07736440388549587,1.0
 snit_c,snit,103,270.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,-0.484,-0.3815294792473981,0.10247052075260188,0.2117159519681857,1.0
@@ -354,7 +354,7 @@ snit_d,snit,104,90.0,lever_DY,lever:centroid_concrete_to_tension:dy,,1.034,-0.22
 snit_d,snit,104,90.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.0,-1.0647197493345748e-16,-1.0647197493345748e-16,0.00010647197493345748,
 snit_d,snit,104,90.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,1.034,0.221045342789006,-0.812954657210994,0.7862230727379053,1.0
 snit_d,snit,104,90.0,lever_L,lever:centroid_concrete_to_tension:L,,1.034,0.221045342789006,-0.812954657210994,0.7862230727379053,1.0
-snit_d,snit,104,90.0,lever_DX,lever:reported:DX,,0.0,-6.668327415154495e-17,-6.668327415154495e-17,6.668327415154496e-05,
+snit_d,snit,104,90.0,lever_DX,lever:reported:DX,,0.0,6.668327415154495e-17,6.668327415154495e-17,6.668327415154496e-05,
 snit_d,snit,104,90.0,lever_DY,lever:reported:DY,,1.034,0.7704759931504668,-0.26352400684953325,0.2548588073980012,1.0
 snit_d,snit,104,90.0,lever_L,lever:reported:L,,1.034,0.7704759931504668,-0.26352400684953325,0.2548588073980012,1.0
 snit_d,snit,104,90.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,1.034,0.5833128173375587,-0.45068718266244134,0.4358676814917228,1.0
@@ -404,7 +404,7 @@ section0,annular,201,0.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.0,-0.
 section0,annular,201,0.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,-0.461,1.7346018536727898e-17,0.461,1.0,0.0
 section0,annular,201,0.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.0,0.4546997885550224,0.4546997885550224,454699788555.0224,
 section0,annular,201,0.0,lever_L,lever:centroid_concrete_to_tension:L,,0.461,0.4546997885550224,-0.00630021144497761,0.013666402266762712,1.0
-section0,annular,201,0.0,lever_DX,lever:reported:DX,,-0.461,0.4609066501475798,0.9219066501475799,1.9997975057431232,0.0
+section0,annular,201,0.0,lever_DX,lever:reported:DX,,-0.461,-0.4609066501475798,9.334985242021032e-05,0.00020249425687681198,1.0
 section0,annular,201,0.0,lever_DY,lever:reported:DY,,0.0,1.2242407205011659e-17,1.2242407205011659e-17,1.2242407205011659e-05,
 section0,annular,201,0.0,lever_L,lever:reported:L,,0.461,0.4609066501475798,-9.334985242021032e-05,0.00020249425687681198,1.0
 section0,annular,201,0.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.0,5.520575115613461e-18,5.520575115613461e-18,5.520575115613461e-06,
@@ -433,7 +433,7 @@ section0,annular,201,45.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.326,
 section0,annular,201,45.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,-0.33,0.0007064296303070197,0.33070642963030705,1.0021406958494152,0.0
 section0,annular,201,45.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.326,0.4557241415485961,0.12972414154859607,0.3979268145662456,1.0
 section0,annular,201,45.0,lever_L,lever:centroid_concrete_to_tension:L,,0.463,0.45572468907557273,-0.007275310924427292,0.01571341452360106,1.0
-section0,annular,201,45.0,lever_DX,lever:reported:DX,,-0.33,0.3297151773719183,0.6597151773719183,1.999136901127025,0.0
+section0,annular,201,45.0,lever_DX,lever:reported:DX,,-0.33,-0.3297151773719183,0.00028482262808171566,0.0008630988729748959,1.0
 section0,annular,201,45.0,lever_DY,lever:reported:DY,,0.326,0.325185305106213,-0.0008146948937869936,0.002499064091371146,1.0
 section0,annular,201,45.0,lever_L,lever:reported:L,,0.463,0.4630956497813561,9.564978135606639e-05,0.00020658700076904186,1.0
 section0,annular,201,45.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.326,0.32422521695534656,-0.0017747830446534496,0.005444119768875612,1.0
@@ -462,7 +462,7 @@ section0,annular,201,90.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.463,
 section0,annular,201,90.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.0,1.992816556855564e-17,1.992816556855564e-17,1.992816556855564e-05,
 section0,annular,201,90.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.463,0.455576835359251,-0.007423164640749047,0.016032753003777638,1.0
 section0,annular,201,90.0,lever_L,lever:centroid_concrete_to_tension:L,,0.463,0.455576835359251,-0.007423164640749047,0.016032753003777638,1.0
-section0,annular,201,90.0,lever_DX,lever:reported:DX,,0.0,1.6451623810671096e-17,1.6451623810671096e-17,1.6451623810671097e-05,
+section0,annular,201,90.0,lever_DX,lever:reported:DX,,0.0,-1.6451623810671096e-17,-1.6451623810671096e-17,1.6451623810671097e-05,
 section0,annular,201,90.0,lever_DY,lever:reported:DY,,0.463,0.4629892274670641,-1.0772532935909851e-05,2.3266809796781535e-05,1.0
 section0,annular,201,90.0,lever_L,lever:reported:L,,0.463,0.4629892274670641,-1.0772532935909851e-05,2.3266809796781535e-05,1.0
 section0,annular,201,90.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.463,0.4552514647008801,-0.007748535299119896,0.01673549740630647,1.0
@@ -491,7 +491,7 @@ section0,annular,201,135.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.326
 section0,annular,201,135.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.33,-0.0007064296303070048,-0.330706429630307,1.002140695849415,0.0
 section0,annular,201,135.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.326,0.4557241415485962,0.12972414154859618,0.39792681456624596,1.0
 section0,annular,201,135.0,lever_L,lever:centroid_concrete_to_tension:L,,0.463,0.45572468907557284,-0.007275310924427181,0.01571341452360082,1.0
-section0,annular,201,135.0,lever_DX,lever:reported:DX,,0.33,-0.3297151773719184,-0.6597151773719184,1.9991369011270255,0.0
+section0,annular,201,135.0,lever_DX,lever:reported:DX,,0.33,0.3297151773719184,-0.00028482262808160463,0.0008630988729745595,1.0
 section0,annular,201,135.0,lever_DY,lever:reported:DY,,0.326,0.32518530510621313,-0.0008146948937868825,0.002499064091370805,1.0
 section0,annular,201,135.0,lever_L,lever:reported:L,,0.463,0.4630956497813562,9.564978135617741e-05,0.00020658700076928166,1.0
 section0,annular,201,135.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.326,0.32422521695534656,-0.0017747830446534496,0.005444119768875612,1.0
@@ -520,7 +520,7 @@ section0,annular,201,180.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.0,-
 section0,annular,201,180.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.461,3.524322930538689e-17,-0.46099999999999997,0.9999999999999999,1.0
 section0,annular,201,180.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.0,0.45469978855502236,0.45469978855502236,454699788555.02234,
 section0,annular,201,180.0,lever_L,lever:centroid_concrete_to_tension:L,,0.461,0.45469978855502236,-0.006300211444977666,0.013666402266762832,1.0
-section0,annular,201,180.0,lever_DX,lever:reported:DX,,0.461,-0.4609066501475798,-0.9219066501475799,1.9997975057431232,0.0
+section0,annular,201,180.0,lever_DX,lever:reported:DX,,0.461,0.4609066501475798,-9.334985242021032e-05,0.00020249425687681198,1.0
 section0,annular,201,180.0,lever_DY,lever:reported:DY,,0.0,5.463221506814741e-17,5.463221506814741e-17,5.463221506814741e-05,
 section0,annular,201,180.0,lever_L,lever:reported:L,,0.461,0.4609066501475798,-9.334985242021032e-05,0.00020249425687681198,1.0
 section0,annular,201,180.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.0,2.300464956710238e-17,2.300464956710238e-17,2.3004649567102382e-05,
@@ -549,7 +549,7 @@ section0,annular,201,225.0,lever_DY,lever:centroid_concrete_to_tension:dy,,-0.32
 section0,annular,201,225.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.33,0.000706429630307009,-0.32929357036969303,0.9978593041505849,1.0
 section0,annular,201,225.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,-0.326,0.4557241415485962,0.7817241415485963,2.397926814566246,0.0
 section0,annular,201,225.0,lever_L,lever:centroid_concrete_to_tension:L,,0.463,0.45572468907557284,-0.007275310924427181,0.01571341452360082,1.0
-section0,annular,201,225.0,lever_DX,lever:reported:DX,,0.33,-0.32971517737191847,-0.6597151773719185,1.9991369011270257,0.0
+section0,annular,201,225.0,lever_DX,lever:reported:DX,,0.33,0.32971517737191847,-0.0002848226280815491,0.0008630988729743912,1.0
 section0,annular,201,225.0,lever_DY,lever:reported:DY,,-0.326,-0.3251853051062131,0.000814694893786938,0.0024990640913709755,1.0
 section0,annular,201,225.0,lever_L,lever:reported:L,,0.463,0.4630956497813562,9.564978135617741e-05,0.00020658700076928166,1.0
 section0,annular,201,225.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,-0.326,-0.32422521695534645,0.0017747830446535606,0.005444119768875952,1.0
@@ -578,7 +578,7 @@ section0,annular,201,270.0,lever_DY,lever:centroid_concrete_to_tension:dy,,-0.46
 section0,annular,201,270.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.0,6.978598213739185e-18,6.978598213739185e-18,6.978598213739185e-06,
 section0,annular,201,270.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,-0.463,0.455576835359251,0.9185768353592509,1.9839672469962222,0.0
 section0,annular,201,270.0,lever_L,lever:centroid_concrete_to_tension:L,,0.463,0.455576835359251,-0.007423164640749047,0.016032753003777638,1.0
-section0,annular,201,270.0,lever_DX,lever:reported:DX,,0.0,-5.813629267716455e-17,-5.813629267716455e-17,5.813629267716455e-05,
+section0,annular,201,270.0,lever_DX,lever:reported:DX,,0.0,5.813629267716455e-17,5.813629267716455e-17,5.813629267716455e-05,
 section0,annular,201,270.0,lever_DY,lever:reported:DY,,-0.463,-0.46298922746706406,1.0772532935965362e-05,2.3266809796901428e-05,1.0
 section0,annular,201,270.0,lever_L,lever:reported:L,,0.463,0.46298922746706406,-1.0772532935965362e-05,2.3266809796901428e-05,1.0
 section0,annular,201,270.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,-0.463,-0.4552514647008801,0.007748535299119896,0.01673549740630647,1.0
@@ -607,7 +607,7 @@ section0,annular,201,315.0,lever_DY,lever:centroid_concrete_to_tension:dy,,-0.32
 section0,annular,201,315.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,-0.33,-0.0007064296303069836,0.32929357036969303,0.9978593041505849,1.0
 section0,annular,201,315.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,-0.326,0.45572414154859625,0.7817241415485963,2.397926814566246,0.0
 section0,annular,201,315.0,lever_L,lever:centroid_concrete_to_tension:L,,0.463,0.4557246890755729,-0.007275310924427125,0.015713414523600703,1.0
-section0,annular,201,315.0,lever_DX,lever:reported:DX,,-0.33,0.3297151773719184,0.6597151773719184,1.9991369011270255,0.0
+section0,annular,201,315.0,lever_DX,lever:reported:DX,,-0.33,-0.3297151773719184,0.00028482262808160463,0.0008630988729745595,1.0
 section0,annular,201,315.0,lever_DY,lever:reported:DY,,-0.326,-0.3251853051062132,0.000814694893786827,0.002499064091370635,1.0
 section0,annular,201,315.0,lever_L,lever:reported:L,,0.463,0.46309564978135626,9.564978135623292e-05,0.00020658700076940154,1.0
 section0,annular,201,315.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,-0.326,-0.3242252169553467,0.0017747830446533386,0.0054441197688752715,1.0
@@ -636,7 +636,7 @@ section0,annular,201,360.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.0,-
 section0,annular,201,360.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,-0.461,2.378860258513427e-17,0.461,1.0,0.0
 section0,annular,201,360.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.0,0.45469978855502247,0.45469978855502247,454699788555.02246,
 section0,annular,201,360.0,lever_L,lever:centroid_concrete_to_tension:L,,0.461,0.45469978855502247,-0.006300211444977555,0.01366640226676259,1.0
-section0,annular,201,360.0,lever_DX,lever:reported:DX,,-0.461,0.4609066501475798,0.9219066501475799,1.9997975057431232,0.0
+section0,annular,201,360.0,lever_DX,lever:reported:DX,,-0.461,-0.4609066501475798,9.334985242021032e-05,0.00020249425687681198,1.0
 section0,annular,201,360.0,lever_DY,lever:reported:DY,,0.0,-1.0297823173087987e-16,-1.0297823173087987e-16,0.00010297823173087988,
 section0,annular,201,360.0,lever_L,lever:reported:L,,0.461,0.4609066501475798,-9.334985242021032e-05,0.00020249425687681198,1.0
 section0,annular,201,360.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.0,-6.644263058040082e-17,-6.644263058040082e-17,6.644263058040081e-05,
@@ -665,7 +665,7 @@ sectioniv,annular,202,0.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.0,-0
 sectioniv,annular,202,0.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,-0.346,2.4547892626163153e-18,0.346,1.0,0.0
 sectioniv,annular,202,0.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.0,0.34189010505797685,0.34189010505797685,341890105057.97687,
 sectioniv,annular,202,0.0,lever_L,lever:centroid_concrete_to_tension:L,,0.346,0.34189010505797685,-0.004109894942023129,0.011878309080991703,1.0
-sectioniv,annular,202,0.0,lever_DX,lever:reported:DX,,-0.346,0.3464987996908479,0.6924987996908478,2.0014416176036067,0.0
+sectioniv,annular,202,0.0,lever_DX,lever:reported:DX,,-0.346,-0.3464987996908479,-0.0004987996908479286,0.0014416176036067302,1.0
 sectioniv,annular,202,0.0,lever_DY,lever:reported:DY,,0.0,2.878591631681156e-17,2.878591631681156e-17,2.878591631681156e-05,
 sectioniv,annular,202,0.0,lever_L,lever:reported:L,,0.346,0.3464987996908479,0.0004987996908479286,0.0014416176036067302,1.0
 sectioniv,annular,202,0.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.0,1.915048989956555e-17,1.915048989956555e-17,1.915048989956555e-05,
@@ -694,7 +694,7 @@ sectioniv,annular,202,45.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.246
 sectioniv,annular,202,45.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,-0.245,-0.0009838154627723613,0.24401618453722762,0.9959844266825617,1.0
 sectioniv,annular,202,45.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.246,0.3419978144218089,0.09599781442180888,0.39023501797483284,1.0
 sectioniv,annular,202,45.0,lever_L,lever:centroid_concrete_to_tension:L,,0.348,0.3419992294759724,-0.006000770524027588,0.017243593459849393,1.0
-sectioniv,annular,202,45.0,lever_DX,lever:reported:DX,,-0.245,0.24494791638889785,0.48994791638889784,1.999787413832236,0.0
+sectioniv,annular,202,45.0,lever_DX,lever:reported:DX,,-0.245,-0.24494791638889785,5.208361110214943e-05,0.00021258616776387523,1.0
 sectioniv,annular,202,45.0,lever_DY,lever:reported:DY,,0.246,0.24626243322211502,0.0002624332221150272,0.0010668017159147446,1.0
 sectioniv,annular,202,45.0,lever_L,lever:reported:L,,0.348,0.34733941290866943,-0.0006605870913305445,0.0018982387681912198,1.0
 sectioniv,annular,202,45.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.246,0.24241197859977573,-0.003588021400224267,0.014585452846440111,1.0
@@ -723,7 +723,7 @@ sectioniv,annular,202,90.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.35,
 sectioniv,annular,202,90.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.0,7.961499901701493e-18,7.961499901701493e-18,7.961499901701493e-06,
 sectioniv,annular,202,90.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.35,0.34318517497428697,-0.006814825025713012,0.01947092864489432,1.0
 sectioniv,annular,202,90.0,lever_L,lever:centroid_concrete_to_tension:L,,0.35,0.34318517497428697,-0.006814825025713012,0.01947092864489432,1.0
-sectioniv,annular,202,90.0,lever_DX,lever:reported:DX,,0.0,9.6072720363316e-18,9.6072720363316e-18,9.6072720363316e-06,
+sectioniv,annular,202,90.0,lever_DX,lever:reported:DX,,0.0,-9.6072720363316e-18,-9.6072720363316e-18,9.6072720363316e-06,
 sectioniv,annular,202,90.0,lever_DY,lever:reported:DY,,0.35,0.3497572045559956,-0.00024279544400435116,0.0006937012685838605,1.0
 sectioniv,annular,202,90.0,lever_L,lever:reported:L,,0.35,0.3497572045559956,-0.00024279544400435116,0.0006937012685838605,1.0
 sectioniv,annular,202,90.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.35,0.34607921032769484,-0.003920789672305136,0.011202256206586103,1.0
@@ -752,7 +752,7 @@ sectioniv,annular,202,135.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.24
 sectioniv,annular,202,135.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.245,0.0009838154627723821,-0.24401618453722762,0.9959844266825617,1.0
 sectioniv,annular,202,135.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.246,0.3419978144218089,0.09599781442180888,0.39023501797483284,1.0
 sectioniv,annular,202,135.0,lever_L,lever:centroid_concrete_to_tension:L,,0.348,0.3419992294759724,-0.006000770524027588,0.017243593459849393,1.0
-sectioniv,annular,202,135.0,lever_DX,lever:reported:DX,,0.245,-0.24494791638889774,-0.48994791638889773,1.9997874138322356,0.0
+sectioniv,annular,202,135.0,lever_DX,lever:reported:DX,,0.245,0.24494791638889774,-5.208361110226045e-05,0.00021258616776432838,1.0
 sectioniv,annular,202,135.0,lever_DY,lever:reported:DY,,0.246,0.24626243322211497,0.00026243322211497166,0.0010668017159145189,1.0
 sectioniv,annular,202,135.0,lever_L,lever:reported:L,,0.348,0.3473394129086693,-0.0006605870913306555,0.001898238768191539,1.0
 sectioniv,annular,202,135.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.246,0.24241197859977567,-0.0035880214002243227,0.014585452846440337,1.0
@@ -781,7 +781,7 @@ sectioniv,annular,202,180.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.0,
 sectioniv,annular,202,180.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.346,2.9758794517629765e-18,-0.346,1.0,1.0
 sectioniv,annular,202,180.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.0,0.341890105057977,0.341890105057977,341890105057.977,
 sectioniv,annular,202,180.0,lever_L,lever:centroid_concrete_to_tension:L,,0.346,0.341890105057977,-0.0041098949420229625,0.011878309080991222,1.0
-sectioniv,annular,202,180.0,lever_DX,lever:reported:DX,,0.346,-0.346498799690848,-0.692498799690848,2.001441617603607,0.0
+sectioniv,annular,202,180.0,lever_DX,lever:reported:DX,,0.346,0.346498799690848,0.0004987996908480397,0.0014416176036070511,1.0
 sectioniv,annular,202,180.0,lever_DY,lever:reported:DY,,0.0,2.3803736517880473e-17,2.3803736517880473e-17,2.3803736517880473e-05,
 sectioniv,annular,202,180.0,lever_L,lever:reported:L,,0.346,0.346498799690848,0.0004987996908480397,0.0014416176036070511,1.0
 sectioniv,annular,202,180.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.0,1.5550136390056955e-17,1.5550136390056955e-17,1.5550136390056955e-05,
@@ -810,7 +810,7 @@ sectioniv,annular,202,225.0,lever_DY,lever:centroid_concrete_to_tension:dy,,-0.2
 sectioniv,annular,202,225.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.245,-0.0009838154627723826,-0.24598381546277237,1.0040155733174383,0.0
 sectioniv,annular,202,225.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,-0.246,0.341997814421809,0.587997814421809,2.3902350179748333,0.0
 sectioniv,annular,202,225.0,lever_L,lever:centroid_concrete_to_tension:L,,0.348,0.3419992294759725,-0.006000770524027477,0.017243593459849074,1.0
-sectioniv,annular,202,225.0,lever_DX,lever:reported:DX,,0.245,-0.24494791638889782,-0.4899479163888978,1.9997874138322358,0.0
+sectioniv,annular,202,225.0,lever_DX,lever:reported:DX,,0.245,0.24494791638889782,-5.2083611102177185e-05,0.0002125861677639885,1.0
 sectioniv,annular,202,225.0,lever_DY,lever:reported:DY,,-0.246,-0.24626243322211497,-0.00026243322211497166,0.0010668017159145189,1.0
 sectioniv,annular,202,225.0,lever_L,lever:reported:L,,0.348,0.3473394129086694,-0.0006605870913306,0.0018982387681913794,1.0
 sectioniv,annular,202,225.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,-0.246,-0.24241197859977567,0.0035880214002243227,0.014585452846440337,1.0
@@ -839,7 +839,7 @@ sectioniv,annular,202,270.0,lever_DY,lever:centroid_concrete_to_tension:dy,,-0.3
 sectioniv,annular,202,270.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,0.0,-1.1695312945878451e-17,-1.1695312945878451e-17,1.1695312945878452e-05,
 sectioniv,annular,202,270.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,-0.35,0.3431851749742869,0.6931851749742869,1.9805290713551056,0.0
 sectioniv,annular,202,270.0,lever_L,lever:centroid_concrete_to_tension:L,,0.35,0.3431851749742869,-0.006814825025713067,0.01947092864489448,1.0
-sectioniv,annular,202,270.0,lever_DX,lever:reported:DX,,0.0,-2.99729075884943e-17,-2.99729075884943e-17,2.9972907588494302e-05,
+sectioniv,annular,202,270.0,lever_DX,lever:reported:DX,,0.0,2.99729075884943e-17,2.99729075884943e-17,2.9972907588494302e-05,
 sectioniv,annular,202,270.0,lever_DY,lever:reported:DY,,-0.35,-0.34975720455599557,0.00024279544400440667,0.0006937012685840191,1.0
 sectioniv,annular,202,270.0,lever_L,lever:reported:L,,0.35,0.34975720455599557,-0.00024279544400440667,0.0006937012685840191,1.0
 sectioniv,annular,202,270.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,-0.35,-0.34607921032769484,0.003920789672305136,0.011202256206586103,1.0
@@ -868,7 +868,7 @@ sectioniv,annular,202,315.0,lever_DY,lever:centroid_concrete_to_tension:dy,,-0.2
 sectioniv,annular,202,315.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,-0.245,0.000983815462772379,0.24598381546277237,1.0040155733174383,0.0
 sectioniv,annular,202,315.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,-0.246,0.341997814421809,0.587997814421809,2.3902350179748333,0.0
 sectioniv,annular,202,315.0,lever_L,lever:centroid_concrete_to_tension:L,,0.348,0.3419992294759725,-0.006000770524027477,0.017243593459849074,1.0
-sectioniv,annular,202,315.0,lever_DX,lever:reported:DX,,-0.245,0.24494791638889782,0.4899479163888978,1.9997874138322358,0.0
+sectioniv,annular,202,315.0,lever_DX,lever:reported:DX,,-0.245,-0.24494791638889782,5.2083611102177185e-05,0.0002125861677639885,1.0
 sectioniv,annular,202,315.0,lever_DY,lever:reported:DY,,-0.246,-0.2462624332221151,-0.00026243322211511044,0.0010668017159150831,1.0
 sectioniv,annular,202,315.0,lever_L,lever:reported:L,,0.348,0.3473394129086695,-0.000660587091330489,0.0018982387681910605,1.0
 sectioniv,annular,202,315.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,-0.246,-0.24241197859977573,0.003588021400224267,0.014585452846440111,1.0
@@ -897,7 +897,7 @@ sectioniv,annular,202,360.0,lever_DY,lever:centroid_concrete_to_tension:dy,,0.0,
 sectioniv,annular,202,360.0,lever_DX,lever:centroid_concrete_to_tension:dx_negated,,-0.346,1.3898167007202572e-17,0.346,1.0,0.0
 sectioniv,annular,202,360.0,lever_DY,lever:centroid_concrete_to_tension:dy_negated,,0.0,0.34189010505797685,0.34189010505797685,341890105057.97687,
 sectioniv,annular,202,360.0,lever_L,lever:centroid_concrete_to_tension:L,,0.346,0.34189010505797685,-0.004109894942023129,0.011878309080991703,1.0
-sectioniv,annular,202,360.0,lever_DX,lever:reported:DX,,-0.346,0.34649879969084796,0.6924987996908479,2.0014416176036067,0.0
+sectioniv,annular,202,360.0,lever_DX,lever:reported:DX,,-0.346,-0.34649879969084796,-0.0004987996908479841,0.0014416176036068907,1.0
 sectioniv,annular,202,360.0,lever_DY,lever:reported:DY,,0.0,-7.588664225564031e-17,-7.588664225564031e-17,7.588664225564031e-05,
 sectioniv,annular,202,360.0,lever_L,lever:reported:L,,0.346,0.34649879969084796,0.0004987996908479841,0.0014416176036068907,1.0
 sectioniv,annular,202,360.0,lever_DY,lever:moment_over_compress_global:DY_from_Mx,,0.0,-5.369204810293599e-17,-5.369204810293599e-17,5.369204810293599e-05,

@@ -17,6 +17,8 @@ from tests.plastic_diagnostics import (
     run_tbeam_constitutive_variant_study,
     run_tbeam_branch_audit,
     run_tbeam_type1_interpretation_study,
+    run_tbeam_reported_strain_study,
+    run_annular_dxdy_definition_study,
 )
 
 
@@ -341,3 +343,28 @@ def test_tbeam_type1_interpretation_study_is_reproducible_and_ranked():
         "D_hybrid_curve_plus_incremental_cap",
     }
     assert {"max_rel_err_strain_mild", "max_rel_err_strain_prestressed", "max_rel_err_kappa", "max_rel_err_compress_force", "max_rel_err_Mx", "max_rel_err_My"}.issubset(df.columns)
+
+
+def test_tbeam_reported_strain_study_exposes_candidate_grid_and_no_clear_dual_output_winner():
+    detail, summary = run_tbeam_reported_strain_study()
+    assert not detail.empty
+    assert not summary.empty
+    assert {"output", "candidate", "max_rel_error", "sign_agreement_rate"}.issubset(summary.columns)
+    assert set(summary["output"]) == {"strain_mild", "strain_prestressed"}
+
+    mild_best = summary[summary["output"] == "strain_mild"].iloc[0]
+    pre_best = summary[summary["output"] == "strain_prestressed"].iloc[0]
+    # PR scope guard: only adopt production strain rule if one candidate clearly wins both outputs.
+    assert mild_best["candidate"] != pre_best["candidate"]
+
+
+def test_annular_dxdy_definition_study_ranks_flip_dy_rule_as_best_family_fit():
+    detail, summary = run_annular_dxdy_definition_study()
+    assert not detail.empty
+    assert not summary.empty
+    assert {"candidate", "max_rel_error_DX", "max_rel_error_DY", "rotational_symmetry_dx_rate", "rotational_symmetry_dy_rate"}.issubset(summary.columns)
+
+    best = summary.iloc[0]
+    assert best["candidate"] in {"A_current_branch_rule", "D_flip_DY_only"}
+    assert float(best["max_rel_error_DX"]) < 0.01
+    assert float(best["max_rel_error_DY"]) < 0.01

@@ -1731,3 +1731,253 @@ def run_tbeam_type1_interpretation_study() -> pd.DataFrame:
     for c in ["max_rel_err_strain_mild","max_rel_err_strain_prestressed","max_rel_err_kappa","max_rel_err_compress_force","max_rel_err_Mx","max_rel_err_My"]:
         out[f"delta_vs_baseline_{c}"] = out[c] - float(base[c])
     return out
+
+
+def run_tbeam_reported_strain_study() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Focused T-beam audit for reported strain output definitions."""
+    solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
+    rows = []
+
+    for load_case, load in [(3, LOAD_CASE_3), (4, LOAD_CASE_4)]:
+        solved = solver.solve_angle_sweep(load.angles_deg, load.P_target)
+        by_angle = {float(r["angle_v_deg"]): r for r in solved}
+
+        for lc, angle in DIAGNOSTIC_ROWS:
+            if int(lc) != int(load_case):
+                continue
+            a = float(angle)
+            row = by_angle[a]
+            ref = MANUAL_ROW_DIAGNOSTICS[(int(load_case), a)]
+            ref_mild = _to_permille_ref(ref.get("strain_mild"))
+            ref_pre = _to_permille_ref(ref.get("strain_prestressed"))
+            dbg = row.get("debug_force_components") or {}
+            mild_rows = list(dbg.get("mild_bar_details") or [])
+            pre_rows = list(dbg.get("prestressed_bar_details") or [])
+
+            if mild_rows:
+                force_gov = max(mild_rows, key=lambda r: abs(float(r.get("force_kN", 0.0))))
+                abs_gov = max(mild_rows, key=lambda r: abs(float(r.get("strain_total", 0.0))))
+                comp_ext = min(mild_rows, key=lambda r: float(r.get("y", np.inf)))
+                tens_ext = max(mild_rows, key=lambda r: float(r.get("y", -np.inf)))
+                mild_candidates = {
+                    "A_force_governing_bar_total_legacy": -1000.0 * float(force_gov.get("strain_total", np.nan)),
+                    "B_abs_strain_governing_bar_total_legacy": -1000.0 * float(abs_gov.get("strain_total", np.nan)),
+                    "C_extreme_compression_side_bar_total_legacy": -1000.0 * float(comp_ext.get("strain_total", np.nan)),
+                    "D_extreme_tension_side_bar_total_legacy": -1000.0 * float(tens_ext.get("strain_total", np.nan)),
+                    "E_max_algebraic_legacy_reported": float(max([-1000.0 * float(b.get("strain_total", np.nan)) for b in mild_rows])),
+                    "F_min_algebraic_legacy_reported": float(min([-1000.0 * float(b.get("strain_total", np.nan)) for b in mild_rows])),
+                    "G_current_solver_reported": float(row.get("strain_mild", np.nan)),
+                }
+            else:
+                mild_candidates = {}
+
+            if pre_rows:
+                force_gov = max(pre_rows, key=lambda r: abs(float(r.get("force_kN", 0.0))))
+                abs_gov = max(pre_rows, key=lambda r: abs(float(r.get("strain_total", 0.0))))
+                comp_ext = min(pre_rows, key=lambda r: float(r.get("y", np.inf)))
+                tens_ext = max(pre_rows, key=lambda r: float(r.get("y", -np.inf)))
+                pre_candidates = {
+                    "A_force_governing_bar_total_legacy": -1000.0 * float(force_gov.get("strain_total", np.nan)),
+                    "B_abs_strain_governing_bar_total_legacy": -1000.0 * float(abs_gov.get("strain_total", np.nan)),
+                    "C_extreme_compression_side_bar_total_legacy": -1000.0 * float(comp_ext.get("strain_total", np.nan)),
+                    "D_extreme_tension_side_bar_total_legacy": -1000.0 * float(tens_ext.get("strain_total", np.nan)),
+                    "E_max_algebraic_legacy_reported": float(max([-1000.0 * float(b.get("strain_total", np.nan)) for b in pre_rows])),
+                    "F_min_algebraic_legacy_reported": float(min([-1000.0 * float(b.get("strain_total", np.nan)) for b in pre_rows])),
+                    "G_current_solver_reported": float(row.get("strain_prestressed", np.nan)),
+                    "G2_force_governing_incremental_internal": 1000.0 * float(force_gov.get("strain_incremental", np.nan)),
+                }
+            else:
+                pre_candidates = {}
+
+            mild_ids = [str(b.get("id")) for b in mild_rows]
+            mild_force = [float(b.get("force_kN", np.nan)) for b in mild_rows]
+            mild_total_internal = [1000.0 * float(b.get("strain_total", np.nan)) for b in mild_rows]
+            mild_total_legacy = [-v for v in mild_total_internal]
+            mild_zone = ["compression" if float(b.get("force_kN", 0.0)) < 0.0 else "tension" for b in mild_rows]
+
+            pre_ids = [str(b.get("id")) for b in pre_rows]
+            pre_force = [float(b.get("force_kN", np.nan)) for b in pre_rows]
+            pre_total_internal = [1000.0 * float(b.get("strain_total", np.nan)) for b in pre_rows]
+            pre_total_legacy = [-v for v in pre_total_internal]
+            pre_inc_internal = [1000.0 * float(b.get("strain_incremental", np.nan)) for b in pre_rows]
+            pre_inc_legacy = [-v for v in pre_inc_internal]
+            pre_zone = ["compression" if float(b.get("force_kN", 0.0)) < 0.0 else "tension" for b in pre_rows]
+
+            for cand, val in mild_candidates.items():
+                rows.append({
+                    "family": "tbeam",
+                    "load_case": int(load_case),
+                    "V_deg": a,
+                    "output": "strain_mild",
+                    "candidate": cand,
+                    "ref": ref_mild,
+                    "calc": float(val) if np.isfinite(val) else np.nan,
+                    "rel_error": _safe_rel_err(float(val), ref_mild),
+                    "signed_error": float(val) - float(ref_mild) if np.isfinite(val) and np.isfinite(ref_mild) else np.nan,
+                    "sign_agreement": _sign_agreement(float(val), ref_mild),
+                    "pivot": row.get("pivot"),
+                    "candidate_count": row.get("candidate_count"),
+                    "selected_candidate_index": row.get("selected_candidate_index"),
+                    "bar_ids": "|".join(mild_ids),
+                    "bar_force_kN": "|".join(f"{v:.6g}" for v in mild_force),
+                    "bar_zone": "|".join(mild_zone),
+                    "mild_total_internal_permille": "|".join(f"{v:.6g}" for v in mild_total_internal),
+                    "mild_total_legacy_permille": "|".join(f"{v:.6g}" for v in mild_total_legacy),
+                })
+
+            for cand, val in pre_candidates.items():
+                rows.append({
+                    "family": "tbeam",
+                    "load_case": int(load_case),
+                    "V_deg": a,
+                    "output": "strain_prestressed",
+                    "candidate": cand,
+                    "ref": ref_pre,
+                    "calc": float(val) if np.isfinite(val) else np.nan,
+                    "rel_error": _safe_rel_err(float(val), ref_pre),
+                    "signed_error": float(val) - float(ref_pre) if np.isfinite(val) and np.isfinite(ref_pre) else np.nan,
+                    "sign_agreement": _sign_agreement(float(val), ref_pre),
+                    "pivot": row.get("pivot"),
+                    "candidate_count": row.get("candidate_count"),
+                    "selected_candidate_index": row.get("selected_candidate_index"),
+                    "bar_ids": "|".join(pre_ids),
+                    "bar_force_kN": "|".join(f"{v:.6g}" for v in pre_force),
+                    "bar_zone": "|".join(pre_zone),
+                    "prestress_total_internal_permille": "|".join(f"{v:.6g}" for v in pre_total_internal),
+                    "prestress_total_legacy_permille": "|".join(f"{v:.6g}" for v in pre_total_legacy),
+                    "prestress_incremental_internal_permille": "|".join(f"{v:.6g}" for v in pre_inc_internal),
+                    "prestress_incremental_legacy_permille": "|".join(f"{v:.6g}" for v in pre_inc_legacy),
+                })
+
+    detail = pd.DataFrame(rows).sort_values(["output", "load_case", "V_deg", "candidate"]).reset_index(drop=True)
+    summary = (
+        detail.groupby(["output", "candidate"], dropna=False)
+        .agg(
+            count=("rel_error", "count"),
+            max_rel_error=("rel_error", "max"),
+            median_rel_error=("rel_error", "median"),
+            sign_agreement_rate=("sign_agreement", "mean"),
+        )
+        .reset_index()
+        .sort_values(["output", "max_rel_error", "median_rel_error"])
+        .reset_index(drop=True)
+    )
+    return detail, summary
+
+
+def run_annular_dxdy_definition_study() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Focused annular-only DX/DY output-definition candidate study."""
+    rows = []
+    pair_defs = [(0.0, 180.0), (90.0, 270.0), (45.0, 225.0)]
+
+    for key in ["section0", "sectioniv"]:
+        case = EMBEDDED_BENCHMARK_CASES[key]
+        solver = case.solver_builder()
+        solved = solver.solve_angle_sweep(case.load.angles_deg, case.load.P_target)
+        by_angle = {float(r["angle_v_deg"]): r for r in solved}
+
+        for angle in case.load.angles_deg:
+            a = float(angle)
+            row = by_angle[a]
+            ref = case.reference_rows.get((case.load_case, a))
+            if ref is None:
+                continue
+            ref_dx = float(ref.get("lever_DX", ref.get("DX", np.nan)))
+            ref_dy = float(ref.get("lever_DY", ref.get("DY", np.nan)))
+            if not (np.isfinite(ref_dx) and np.isfinite(ref_dy)):
+                continue
+
+            dz = row.get("debug_resultant_centroids") or {}
+            xc = dz.get("compress_zone_centroid_x")
+            yc = dz.get("compress_zone_centroid_y")
+            xt = dz.get("tension_zone_centroid_x")
+            yt = dz.get("tension_zone_centroid_y")
+            if any(v is None or not np.isfinite(float(v)) for v in [xc, yc, xt, yt]):
+                continue
+
+            dx_local = float(xt) - float(xc)
+            dy_local = float(yt) - float(yc)
+            phi = float(solver.cs.local_rotation_deg(a))
+            dx_g, dy_g = _rotate_to_global(dx_local, dy_local, phi)
+            # rotate centroids first, then subtract in global frame
+            xc_g, yc_g = _rotate_to_global(float(xc), float(yc), phi)
+            xt_g, yt_g = _rotate_to_global(float(xt), float(yt), phi)
+            dx_global_direct = xt_g - xc_g
+            dy_global_direct = yt_g - yc_g
+
+            candidates = {
+                "A_current_branch_rule": (float(row.get("lever_DX", np.nan)), float(row.get("lever_DY", np.nan))),
+                "B_without_post_transform_sign_override": (dx_g, dy_g),
+                "C_flip_DX_only": (-dx_g, dy_g),
+                "D_flip_DY_only": (dx_g, -dy_g),
+                "E_local_to_global_centroid_vector": (dx_g, dy_g),
+                "F_direct_global_centroid_vector": (dx_global_direct, dy_global_direct),
+                "G_tension_to_compression_local_then_global": (-dx_g, -dy_g),
+            }
+
+            for cand, (dx, dy) in candidates.items():
+                rows.append(
+                    {
+                        "fixture": key,
+                        "load_case": int(case.load_case),
+                        "V_deg": a,
+                        "candidate": cand,
+                        "DX_ref": ref_dx,
+                        "DY_ref": ref_dy,
+                        "DX_calc": float(dx),
+                        "DY_calc": float(dy),
+                        "DX_rel_error": _safe_rel_err(float(dx), ref_dx),
+                        "DY_rel_error": _safe_rel_err(float(dy), ref_dy),
+                        "DX_sign_agreement": _sign_agreement(float(dx), ref_dx),
+                        "DY_sign_agreement": _sign_agreement(float(dy), ref_dy),
+                    }
+                )
+
+    detail = pd.DataFrame(rows).sort_values(["candidate", "fixture", "V_deg"]).reset_index(drop=True)
+
+    sym_rows = []
+    for candidate, cdf in detail.groupby("candidate"):
+        for fixture, fdf in cdf.groupby("fixture"):
+            by_angle = {float(r["V_deg"]): r for _, r in fdf.iterrows()}
+            for a, b in pair_defs:
+                if a not in by_angle or b not in by_angle:
+                    continue
+                ra = by_angle[a]
+                rb = by_angle[b]
+                sym_rows.append(
+                    {
+                        "candidate": candidate,
+                        "fixture": fixture,
+                        "pair": f"{int(a)}_vs_{int(b)}",
+                        "dx_pattern_ok": bool(np.sign(float(ra["DX_calc"])) == -np.sign(float(rb["DX_calc"]))),
+                        "dy_pattern_ok": bool(np.sign(float(ra["DY_calc"])) == -np.sign(float(rb["DY_calc"]))),
+                    }
+                )
+    sym = pd.DataFrame(sym_rows)
+
+    summary = (
+        detail.groupby("candidate", dropna=False)
+        .agg(
+            max_rel_error_DX=("DX_rel_error", "max"),
+            max_rel_error_DY=("DY_rel_error", "max"),
+            sign_agreement_rate_DX=("DX_sign_agreement", "mean"),
+            sign_agreement_rate_DY=("DY_sign_agreement", "mean"),
+        )
+        .reset_index()
+    )
+    if not sym.empty:
+        sym_agg = (
+            sym.groupby("candidate", dropna=False)
+            .agg(
+                rotational_symmetry_dx_rate=("dx_pattern_ok", "mean"),
+                rotational_symmetry_dy_rate=("dy_pattern_ok", "mean"),
+            )
+            .reset_index()
+        )
+        summary = summary.merge(sym_agg, on="candidate", how="left")
+    else:
+        summary["rotational_symmetry_dx_rate"] = np.nan
+        summary["rotational_symmetry_dy_rate"] = np.nan
+
+    summary = summary.sort_values(["max_rel_error_DX", "max_rel_error_DY", "sign_agreement_rate_DX", "sign_agreement_rate_DY"], ascending=[True, True, False, False]).reset_index(drop=True)
+    return detail, summary

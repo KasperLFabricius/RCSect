@@ -69,10 +69,10 @@ Signed errors (abs/rel) are primary benchmark metrics. Magnitude-only errors rem
 
 | mapping | gamma_c | gamma_s | gamma_p | gamma_E | gamma_u | max_rel_err_Mx | max_rel_err_My | mean_rel_force_strain_curvature | mean_rel_moment_transform | dominant_mismatch |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| case_a_baseline | 1.5 | 1.15 | 1.15 | 1.0 | 1.0 | 0.4944897000059521 | 0.3285567559107331 | 0.6551514910132793 | 0.4174292934222179 | largest mismatch appears already present in constitutive/equilibrium response |
-| case_b_manual_strength | 1.9 | 1.5 | 1.5 | 1.0 | 1.0 | 0.08478032450529795 | 0.02443691746026194 | 0.6757060374854993 | 0.20392525517133478 | largest mismatch appears already present in constitutive/equilibrium response |
-| case_c_manual_strength_plus_fe | 1.9 | 1.5 | 1.5 | 1.5 | 1.0 | 0.0011256193420316049 | 0.0007582363712795589 | 0.6787650366555935 | 0.17690491414439613 | largest mismatch appears already present in constitutive/equilibrium response |
-| case_d_manual_strength_plus_fe_fu | 1.9 | 1.5 | 1.5 | 1.5 | 1.5 | 0.00011251455858352603 | 5.4136473249119476e-05 | 0.5207763322849823 | 0.1768865083212662 | largest mismatch appears already present in constitutive/equilibrium response |
+| case_a_baseline | 1.5 | 1.15 | 1.15 | 1.0 | 1.0 | 0.4944897000059521 | 0.3285567559107331 | 0.6551514910132793 | 0.47327265162544235 | largest mismatch appears already present in constitutive/equilibrium response |
+| case_b_manual_strength | 1.9 | 1.5 | 1.5 | 1.0 | 1.0 | 0.08478032450529795 | 0.02443691746026194 | 0.6757060374854993 | 0.3791397697954372 | largest mismatch appears already present in constitutive/equilibrium response |
+| case_c_manual_strength_plus_fe | 1.9 | 1.5 | 1.5 | 1.5 | 1.0 | 0.0011256193420316049 | 0.0007582363712795589 | 0.6787650366555935 | 0.3714621394760257 | largest mismatch appears already present in constitutive/equilibrium response |
+| case_d_manual_strength_plus_fe_fu | 1.9 | 1.5 | 1.5 | 1.5 | 1.5 | 0.00011251455858352603 | 5.4136473249119476e-05 | 0.5207763322849823 | 0.3712625147725225 | largest mismatch appears already present in constitutive/equilibrium response |
 
 ## Type-6 prestress mapping study (Snit A-D, benchmark-only)
 
@@ -103,7 +103,7 @@ Chosen winners (majority across fixture families):
 | moments | 0.010566743050442712 | 0.010566743050442712 | 0.0 |
 | strains | 2.5172367057585783 | 2.5172367057585783 | 0.0 |
 | compression force | 0.0009262566290863856 | 1.7945786894858 | 1.7936524328567136 |
-| lever-arms | 2.001441617603607 | 2.42050482258475 | 0.4190632049811427 |
+| lever-arms | 0.2548588073980012 | 2.42050482258475 | 2.1656460151867485 |
 
 ## Semantic-versus-constitutive conclusion for unresolved outputs
 
