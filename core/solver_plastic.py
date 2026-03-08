@@ -36,6 +36,12 @@ def _max_by_abs(values: list[float]) -> float | None:
     return max(values, key=lambda v: abs(v))
 
 
+def _governing_bar_by_force(rows: list[dict]) -> dict | None:
+    if not rows:
+        return None
+    return max(rows, key=lambda r: abs(float(r.get("force_kN", 0.0))))
+
+
 class PlasticSolver:
     """
     Calculates the ultimate flexural capacity of a cross section 
@@ -226,18 +232,21 @@ class PlasticSolver:
         intersection_x = y_na_solution / sin_a if abs(sin_a) > 1e-6 else float('inf')
 
         # [cite_start]3. Maximum Strains [cite: 761]
-        max_concrete_strain = kappa * (self.y_top - y_na_solution) * 1000.0 # per mille
-        # Legacy PCROSS reporting basis: signed strain with governing absolute magnitude.
-        max_mild_strain = 0.0
-        mild_governing = _max_by_abs(forces_data['mild_strains_total_permille'])
-        if mild_governing is not None:
-            max_mild_strain = mild_governing
-        max_prestressed_strain = None
-        prest_governing = _max_by_abs(forces_data['prestressed_strains_incremental_permille'])
-        if prest_governing is not None:
-            max_prestressed_strain = prest_governing
+        max_concrete_strain = kappa * (self.y_top - y_na_solution) * 1000.0  # per mille
+
+        # Direct legacy-style reconstruction:
+        # governing bar per family = bar with largest absolute force magnitude.
+        mild_gov = _governing_bar_by_force(forces_data['mild_bar_details'])
+        pre_gov = _governing_bar_by_force(forces_data['prestressed_bar_details'])
+
+        max_mild_strain = float(mild_gov['strain_total'] * 1000.0) if mild_gov is not None else 0.0
+        max_prestressed_strain = float(pre_gov['strain_total'] * 1000.0) if pre_gov is not None else None
 
         # [cite_start]4. Lever Arm Calculations [cite: 762, 763, 773, 784]
+        # Compression resultant centroid is force-weighted over:
+        # concrete compression + compression mild + compression prestress.
+        # Tension resultant centroid is force-weighted over:
+        # tension mild + tension prestress.
         c_comp = forces_data['centroid_compression']
         c_tens = forces_data['centroid_tension']
 
@@ -246,14 +255,15 @@ class PlasticSolver:
 
         DX_global = DX_rot * cos_a - DY_rot * sin_a
         DY_global = DX_rot * sin_a + DY_rot * cos_a
-
-        # Legacy reporting semantics: prefer lever components recovered from
-        # global moments and total compression resultant when available.
-        comp_force = float(forces_data['total_compression'])
-        if comp_force > 1e-9:
-            DY_global = Mx_global / comp_force
-            DX_global = My_global / comp_force
         L = np.sqrt(DX_global**2 + DY_global**2)
+
+        # COMPRESS FORCE per legacy decomposition (positive magnitude):
+        # concrete compression + compression mild + compression prestress.
+        comp_force = float(
+            forces_data['concrete_compression']
+            + forces_data['compression_mild']
+            + forces_data['compression_prestress']
+        )
         
         # [cite_start]5. Safety Warnings [cite: 766, 767]
         warning_flag = None
@@ -281,7 +291,7 @@ class PlasticSolver:
             "strain_concrete": max_concrete_strain,
             "strain_mild": max_mild_strain,
             "strain_prestressed": max_prestressed_strain,
-            "compress_force": forces_data['total_compression'],
+            "compress_force": comp_force,
             "lever_L": L,
             "lever_DX": DX_global,
             "lever_DY": DY_global,
@@ -294,9 +304,13 @@ class PlasticSolver:
                 "strain_mild_max_tension_permille": max(forces_data['mild_strains_total_permille']) if forces_data['mild_strains_total_permille'] else None,
                 "strain_mild_max_compression_permille": min(forces_data['mild_strains_total_permille']) if forces_data['mild_strains_total_permille'] else None,
                 "strain_mild_governing_abs_permille": _max_by_abs(forces_data['mild_strains_total_permille']),
+                "strain_mild_governing_force_bar_id": mild_gov.get('id') if mild_gov is not None else None,
+                "strain_mild_governing_force_bar_strain_permille": float(mild_gov['strain_total'] * 1000.0) if mild_gov is not None else None,
                 "strain_prestressed_max_tension_permille": max(forces_data['prestressed_strains_total_permille']) if forces_data['prestressed_strains_total_permille'] else None,
                 "strain_prestressed_max_compression_permille": min(forces_data['prestressed_strains_total_permille']) if forces_data['prestressed_strains_total_permille'] else None,
                 "strain_prestressed_governing_abs_permille": _max_by_abs(forces_data['prestressed_strains_total_permille']),
+                "strain_prestressed_governing_force_bar_id": pre_gov.get('id') if pre_gov is not None else None,
+                "strain_prestressed_governing_force_bar_strain_permille": float(pre_gov['strain_total'] * 1000.0) if pre_gov is not None else None,
             },
         }
 

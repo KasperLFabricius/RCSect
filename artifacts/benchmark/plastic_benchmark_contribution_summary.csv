@@ -1,5 +1,5 @@
 mapping,gamma_c,gamma_s,gamma_p,gamma_E,gamma_u,max_rel_err_Mx,max_rel_err_My,mean_rel_force_strain_curvature,mean_rel_moment_transform,dominant_mismatch
-case_a_baseline,1.5,1.15,1.15,1.0,1.0,0.4944897000059521,0.3285567559107331,0.5631196241655068,0.4452645974176554,largest mismatch appears already present in constitutive/equilibrium response
-case_b_manual_strength,1.9,1.5,1.5,1.0,1.0,0.08478032450529795,0.02443691746026194,0.5954214335706445,0.345610192123317,largest mismatch appears already present in constitutive/equilibrium response
-case_c_manual_strength_plus_fe,1.9,1.5,1.5,1.5,1.0,0.0011256193420316049,0.0007582363712795589,0.6002777651062072,0.33190587113217324,largest mismatch appears already present in constitutive/equilibrium response
-case_d_manual_strength_plus_fe_fu,1.9,1.5,1.5,1.5,1.5,0.00011251455858352603,5.4136473249119476e-05,0.6002852487531146,0.3316757927935468,largest mismatch appears already present in constitutive/equilibrium response
+case_a_baseline,1.5,1.15,1.15,1.0,1.0,0.4944897000059521,0.3285567559107331,0.3128789767264274,0.5853636866484566,largest mismatch appears already present in constitutive/equilibrium response
+case_b_manual_strength,1.9,1.5,1.5,1.0,1.0,0.08478032450529795,0.02443691746026194,0.34939945417210166,0.45205801555486963,largest mismatch appears already present in constitutive/equilibrium response
+case_c_manual_strength_plus_fe,1.9,1.5,1.5,1.5,1.0,0.0011256193420316049,0.0007582363712795589,0.3551237191221356,0.4437269960909271,largest mismatch appears already present in constitutive/equilibrium response
+case_d_manual_strength_plus_fe_fu,1.9,1.5,1.5,1.5,1.5,0.00011251455858352603,5.4136473249119476e-05,0.5204424168534856,0.44368984172614373,largest mismatch appears already present in constitutive/equilibrium response
