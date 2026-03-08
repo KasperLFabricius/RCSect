@@ -863,3 +863,384 @@ def run_zone_partition_study() -> pd.DataFrame:
             })
 
     return pd.DataFrame(rows).sort_values(["load_case", "V_deg"]).reset_index(drop=True)
+
+
+def _family_for_load_case(load_case: int) -> str:
+    if load_case in (3, 4):
+        return "tbeam"
+    if load_case in (101, 102, 103, 104):
+        return "snit"
+    return "annular"
+
+
+def _iter_pcross_rows_for_definition_studies() -> list[dict]:
+    from tests.benchmark_compare import BenchmarkSweepSpec
+
+    rows: list[dict] = []
+
+    # T-beam rows from manual corpus (LC3/LC4).
+    tbeam_solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
+    t_specs = [
+        BenchmarkSweepSpec(load_case=3, p_target=LOAD_CASE_3.P_target, angles_deg=LOAD_CASE_3.angles_deg),
+        BenchmarkSweepSpec(load_case=4, p_target=LOAD_CASE_4.P_target, angles_deg=LOAD_CASE_4.angles_deg),
+    ]
+    for spec in t_specs:
+        solved = tbeam_solver.solve_angle_sweep(spec.angles_deg, spec.p_target)
+        by_angle = {float(r["angle_v_deg"]): r for r in solved}
+        for angle in spec.angles_deg:
+            a = float(angle)
+            ref = MANUAL_ROW_DIAGNOSTICS.get((spec.load_case, a))
+            if ref is None:
+                continue
+            rows.append(
+                {
+                    "fixture": f"lc{spec.load_case}",
+                    "fixture_family": "tbeam",
+                    "load_case": spec.load_case,
+                    "V_deg": a,
+                    "row": by_angle[a],
+                    "ref": ref,
+                    "local_rotation_deg": float(tbeam_solver.cs.local_rotation_deg(a)),
+                }
+            )
+
+    # Embedded rows (snit + annular).
+    for key, case in EMBEDDED_BENCHMARK_CASES.items():
+        family = _family_for_load_case(int(case.load_case))
+        solver = case.solver_builder()
+        spec = BenchmarkSweepSpec(load_case=case.load_case, p_target=case.load.P_target, angles_deg=case.load.angles_deg)
+        solved = solver.solve_angle_sweep(spec.angles_deg, spec.p_target)
+        by_angle = {float(r["angle_v_deg"]): r for r in solved}
+        for angle in spec.angles_deg:
+            a = float(angle)
+            ref = case.reference_rows.get((spec.load_case, a), None)
+            if ref is None:
+                continue
+            rows.append(
+                {
+                    "fixture": key,
+                    "fixture_family": family,
+                    "load_case": spec.load_case,
+                    "V_deg": a,
+                    "row": by_angle[a],
+                    "ref": ref,
+                    "local_rotation_deg": float(solver.cs.local_rotation_deg(a)),
+                }
+            )
+    return rows
+
+
+def _to_permille_ref(ref_val: float | None) -> float:
+    if ref_val is None:
+        return np.nan
+    fv = float(ref_val)
+    return fv * 10.0 if abs(fv) <= 1.0 else fv
+
+
+def _row_strain_definition_candidates(row: dict) -> list[dict]:
+    dbg = row.get("debug_force_components") or {}
+    mild_rows = dbg.get("mild_bar_details") or []
+    pre_rows = dbg.get("prestressed_bar_details") or []
+
+    out: list[dict] = []
+
+    def add(output: str, candidate: str, value: float, bar_id=None):
+        out.append({"output": output, "candidate": candidate, "value": value, "bar_id": bar_id})
+
+    if mild_rows:
+        force_gov = max(mild_rows, key=lambda b: abs(float(b.get("force_kN", 0.0))))
+        abs_gov = max(mild_rows, key=lambda b: abs(float(b.get("strain_total", 0.0))))
+        tmax = max(mild_rows, key=lambda b: float(b.get("strain_total", -np.inf)))
+        cmax = min(mild_rows, key=lambda b: float(b.get("strain_total", np.inf)))
+        near_comp_val, near_comp_id = _nearest_bar_strain(mild_rows, "compression", "strain_total")
+        near_tens_val, near_tens_id = _nearest_bar_strain(mild_rows, "tension", "strain_total")
+
+        mild_total_pm = [float(b.get("strain_total", np.nan)) * 1000.0 for b in mild_rows]
+        mild_legacy_pm = [-v for v in mild_total_pm]
+
+        max_legacy_idx = int(np.nanargmax(mild_legacy_pm)) if mild_legacy_pm else -1
+        min_legacy_idx = int(np.nanargmin(mild_legacy_pm)) if mild_legacy_pm else -1
+
+        add("strain_mild", "A_force_governing_total_legacy", -float(force_gov.get("strain_total", np.nan)) * 1000.0, force_gov.get("id"))
+        add("strain_mild", "B_abs_strain_governing_total_legacy", -float(abs_gov.get("strain_total", np.nan)) * 1000.0, abs_gov.get("id"))
+        add("strain_mild", "C_max_tensile_total_internal", float(tmax.get("strain_total", np.nan)) * 1000.0, tmax.get("id"))
+        add("strain_mild", "D_max_compressive_total_internal", float(cmax.get("strain_total", np.nan)) * 1000.0, cmax.get("id"))
+        add("strain_mild", "E_nearest_extreme_compression_total_internal", near_comp_val, near_comp_id)
+        add("strain_mild", "F_nearest_extreme_tension_total_internal", near_tens_val, near_tens_id)
+        add(
+            "strain_mild",
+            "G_max_algebraic_legacy_converted_total",
+            float(max(mild_legacy_pm)) if mild_legacy_pm else np.nan,
+            mild_rows[max_legacy_idx].get("id") if max_legacy_idx >= 0 else None,
+        )
+        add(
+            "strain_mild",
+            "H_min_algebraic_legacy_converted_total",
+            float(min(mild_legacy_pm)) if mild_legacy_pm else np.nan,
+            mild_rows[min_legacy_idx].get("id") if min_legacy_idx >= 0 else None,
+        )
+
+    if pre_rows:
+        force_gov = max(pre_rows, key=lambda b: abs(float(b.get("force_kN", 0.0))))
+        abs_gov_t = max(pre_rows, key=lambda b: abs(float(b.get("strain_total", 0.0))))
+        abs_gov_i = max(pre_rows, key=lambda b: abs(float(b.get("strain_incremental", 0.0))))
+        tmax_t = max(pre_rows, key=lambda b: float(b.get("strain_total", -np.inf)))
+        cmax_t = min(pre_rows, key=lambda b: float(b.get("strain_total", np.inf)))
+        tmax_i = max(pre_rows, key=lambda b: float(b.get("strain_incremental", -np.inf)))
+        cmax_i = min(pre_rows, key=lambda b: float(b.get("strain_incremental", np.inf)))
+        near_comp_t, near_comp_id = _nearest_bar_strain(pre_rows, "compression", "strain_total")
+        near_tens_t, near_tens_id = _nearest_bar_strain(pre_rows, "tension", "strain_total")
+
+        pre_total_pm = [float(b.get("strain_total", np.nan)) * 1000.0 for b in pre_rows]
+        pre_legacy_pm = [-v for v in pre_total_pm]
+        max_legacy_idx = int(np.nanargmax(pre_legacy_pm)) if pre_legacy_pm else -1
+        min_legacy_idx = int(np.nanargmin(pre_legacy_pm)) if pre_legacy_pm else -1
+
+        add("strain_prestressed", "A_force_governing_total_legacy", -float(force_gov.get("strain_total", np.nan)) * 1000.0, force_gov.get("id"))
+        add("strain_prestressed", "B_force_governing_incremental_internal", float(force_gov.get("strain_incremental", np.nan)) * 1000.0, force_gov.get("id"))
+        add("strain_prestressed", "C_abs_strain_governing_total_legacy", -float(abs_gov_t.get("strain_total", np.nan)) * 1000.0, abs_gov_t.get("id"))
+        add("strain_prestressed", "D_abs_strain_governing_incremental_internal", float(abs_gov_i.get("strain_incremental", np.nan)) * 1000.0, abs_gov_i.get("id"))
+        add("strain_prestressed", "E_max_tensile_total_internal", float(tmax_t.get("strain_total", np.nan)) * 1000.0, tmax_t.get("id"))
+        add("strain_prestressed", "F_max_compressive_total_internal", float(cmax_t.get("strain_total", np.nan)) * 1000.0, cmax_t.get("id"))
+        add("strain_prestressed", "G_max_tensile_incremental_internal", float(tmax_i.get("strain_incremental", np.nan)) * 1000.0, tmax_i.get("id"))
+        add("strain_prestressed", "H_max_compressive_incremental_internal", float(cmax_i.get("strain_incremental", np.nan)) * 1000.0, cmax_i.get("id"))
+        add("strain_prestressed", "I_nearest_extreme_compression_total_internal", near_comp_t, near_comp_id)
+        add("strain_prestressed", "J_nearest_extreme_tension_total_internal", near_tens_t, near_tens_id)
+        add(
+            "strain_prestressed",
+            "K_max_algebraic_legacy_converted_total",
+            float(max(pre_legacy_pm)) if pre_legacy_pm else np.nan,
+            pre_rows[max_legacy_idx].get("id") if max_legacy_idx >= 0 else None,
+        )
+        add(
+            "strain_prestressed",
+            "L_min_algebraic_legacy_converted_total",
+            float(min(pre_legacy_pm)) if pre_legacy_pm else np.nan,
+            pre_rows[min_legacy_idx].get("id") if min_legacy_idx >= 0 else None,
+        )
+
+    return out
+
+
+def run_strain_definition_study() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    rows = []
+    for rec in _iter_pcross_rows_for_definition_studies():
+        ref_mild = _to_permille_ref(rec["ref"].get("strain_mild"))
+        ref_pre = _to_permille_ref(rec["ref"].get("strain_prestressed"))
+        for cand in _row_strain_definition_candidates(rec["row"]):
+            ref = ref_mild if cand["output"] == "strain_mild" else ref_pre
+            if not np.isfinite(ref):
+                continue
+            calc = float(cand["value"]) if np.isfinite(cand["value"]) else np.nan
+            rows.append(
+                {
+                    "fixture": rec["fixture"],
+                    "fixture_family": rec["fixture_family"],
+                    "load_case": rec["load_case"],
+                    "V_deg": rec["V_deg"],
+                    "output": cand["output"],
+                    "candidate": cand["candidate"],
+                    "source_bar_id": cand.get("bar_id"),
+                    "ref": ref,
+                    "calc": calc,
+                    "signed_error": calc - ref if np.isfinite(calc) else np.nan,
+                    "rel_error": _safe_rel_err(calc, ref),
+                    "sign_agreement": _sign_agreement(calc, ref),
+                }
+            )
+
+    detail = pd.DataFrame(rows).sort_values(["output", "fixture_family", "load_case", "V_deg", "candidate"]).reset_index(drop=True)
+    summary = (
+        detail.groupby(["fixture_family", "output", "candidate"], dropna=False)
+        .agg(
+            count=("rel_error", "count"),
+            max_rel_error=("rel_error", "max"),
+            median_rel_error=("rel_error", "median"),
+            sign_agreement_rate=("sign_agreement", "mean"),
+        )
+        .reset_index()
+        .sort_values(["output", "fixture_family", "max_rel_error", "median_rel_error"]) 
+        .reset_index(drop=True)
+    )
+
+    winner_rows = []
+    for output in ["strain_mild", "strain_prestressed"]:
+        out_sub = summary[summary["output"] == output]
+        if out_sub.empty:
+            continue
+        best = out_sub.sort_values(["fixture_family", "max_rel_error", "median_rel_error"]).groupby("fixture_family", as_index=False).first()
+        counts = best["candidate"].value_counts()
+        cross = counts.index[0] if (not counts.empty and int(counts.iloc[0]) == 3) else None
+        for _, r in best.iterrows():
+            winner_rows.append(
+                {
+                    "output": output,
+                    "fixture_family": r["fixture_family"],
+                    "best_candidate": r["candidate"],
+                    "max_rel_error": r["max_rel_error"],
+                    "median_rel_error": r["median_rel_error"],
+                    "sign_agreement_rate": r["sign_agreement_rate"],
+                    "cross_family_winner": cross,
+                    "cross_family_winner_exists": bool(cross is not None),
+                }
+            )
+
+    winners = pd.DataFrame(winner_rows).sort_values(["output", "fixture_family"]).reset_index(drop=True)
+    return detail, summary, winners
+
+
+def _rotate_to_global(dx_local: float, dy_local: float, angle_deg: float) -> tuple[float, float]:
+    a = np.radians(angle_deg)
+    c = np.cos(a)
+    s = np.sin(a)
+    return (dx_local * c - dy_local * s, dx_local * s + dy_local * c)
+
+
+def _row_dxdy_sign_candidates(row: dict, local_rotation_deg: float) -> list[dict]:
+    dbg_cent = row.get("debug_resultant_centroids") or {}
+    xc = dbg_cent.get("compress_zone_centroid_x")
+    yc = dbg_cent.get("compress_zone_centroid_y")
+    xt = dbg_cent.get("tension_zone_centroid_x")
+    yt = dbg_cent.get("tension_zone_centroid_y")
+
+    out = []
+
+    def add(candidate: str, dx: float, dy: float):
+        out.append({"candidate": candidate, "output": "lever_DX", "value": dx})
+        out.append({"candidate": candidate, "output": "lever_DY", "value": dy})
+        out.append({"candidate": candidate, "output": "lever_L", "value": float(np.hypot(dx, dy)) if np.isfinite(dx) and np.isfinite(dy) else np.nan})
+
+    finite_centroids = all(v is not None and np.isfinite(float(v)) for v in [xc, yc, xt, yt])
+    if finite_centroids:
+        xcf, ycf, xtf, ytf = float(xc), float(yc), float(xt), float(yt)
+        dx_local_ct = xtf - xcf
+        dy_local_ct = ytf - ycf
+        dx_local_tc = xcf - xtf
+        dy_local_tc = ycf - ytf
+
+        dxg_ct, dyg_ct = _rotate_to_global(dx_local_ct, dy_local_ct, local_rotation_deg)
+        dxg_tc, dyg_tc = _rotate_to_global(dx_local_tc, dy_local_tc, local_rotation_deg)
+
+        # A/B/C/D required explicit variants.
+        add("A_current_centroid_with_explicit_sign_flip", -dxg_ct, -dyg_ct)
+        add("B_centroid_without_explicit_sign_flip", dxg_ct, dyg_ct)
+        add("C_comp_to_tens_local_then_global", dxg_ct, dyg_ct)
+        add("D_tens_to_comp_local_then_global", dxg_tc, dyg_tc)
+
+        # E/F direct-global build from centroid coordinates.
+        xcg, ycg = _rotate_to_global(xcf, ycf, local_rotation_deg)
+        xtg, ytg = _rotate_to_global(xtf, ytf, local_rotation_deg)
+        dxg_direct = xtg - xcg
+        dyg_direct = ytg - ycg
+        add("E_comp_to_tens_direct_global_no_flip", dxg_direct, dyg_direct)
+        add("F_comp_to_tens_direct_global_with_flip", -dxg_direct, -dyg_direct)
+
+    cf = float(row.get("compress_force", np.nan))
+    if np.isfinite(cf) and abs(cf) > 1e-12:
+        dxg = float(row.get("My", np.nan)) / cf if np.isfinite(float(row.get("My", np.nan))) else np.nan
+        dyg = float(row.get("Mx", np.nan)) / cf if np.isfinite(float(row.get("Mx", np.nan))) else np.nan
+        add("G_M_over_compress_surrogate_global", dxg, dyg)
+
+        dxl = float(row.get("My_local", np.nan)) / cf if np.isfinite(float(row.get("My_local", np.nan))) else np.nan
+        dyl = float(row.get("Mx_local", np.nan)) / cf if np.isfinite(float(row.get("Mx_local", np.nan))) else np.nan
+        dxg_l, dyg_l = _rotate_to_global(dxl, dyl, local_rotation_deg) if np.isfinite(dxl) and np.isfinite(dyl) else (np.nan, np.nan)
+        add("H_M_over_compress_surrogate_local_then_global", dxg_l, dyg_l)
+
+    return out
+
+
+def run_dxdy_sign_transformation_study() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    rows = []
+    annular_rows = []
+    for rec in _iter_pcross_rows_for_definition_studies():
+        ref_dx = float(rec["ref"].get("lever_DX", rec["ref"].get("DX", np.nan)))
+        ref_dy = float(rec["ref"].get("lever_DY", rec["ref"].get("DY", np.nan)))
+        ref_l = float(rec["ref"].get("lever_L", rec["ref"].get("L", np.nan)))
+        for cand in _row_dxdy_sign_candidates(rec["row"], rec["local_rotation_deg"]):
+            output = cand["output"]
+            ref = ref_dx if output == "lever_DX" else ref_dy if output == "lever_DY" else ref_l
+            if not np.isfinite(ref):
+                continue
+            calc = float(cand["value"]) if np.isfinite(cand["value"]) else np.nan
+            out_row = {
+                "fixture": rec["fixture"],
+                "fixture_family": rec["fixture_family"],
+                "load_case": rec["load_case"],
+                "V_deg": rec["V_deg"],
+                "output": output,
+                "candidate": cand["candidate"],
+                "ref": ref,
+                "calc": calc,
+                "signed_error": calc - ref if np.isfinite(calc) else np.nan,
+                "rel_error": _safe_rel_err(calc, ref),
+                "sign_agreement": _sign_agreement(calc, ref),
+            }
+            rows.append(out_row)
+            if rec["fixture_family"] == "annular":
+                annular_rows.append(out_row)
+
+    detail = pd.DataFrame(rows).sort_values(["output", "fixture_family", "load_case", "V_deg", "candidate"]).reset_index(drop=True)
+    summary = (
+        detail.groupby(["fixture_family", "output", "candidate"], dropna=False)
+        .agg(
+            count=("rel_error", "count"),
+            max_rel_error=("rel_error", "max"),
+            median_rel_error=("rel_error", "median"),
+            sign_agreement_rate=("sign_agreement", "mean"),
+        )
+        .reset_index()
+        .sort_values(["output", "fixture_family", "max_rel_error", "median_rel_error"]) 
+        .reset_index(drop=True)
+    )
+
+    winner_rows = []
+    for output in ["lever_DX", "lever_DY", "lever_L"]:
+        out_sub = summary[summary["output"] == output]
+        if out_sub.empty:
+            continue
+        best = out_sub.sort_values(["fixture_family", "max_rel_error", "median_rel_error"]).groupby("fixture_family", as_index=False).first()
+        counts = best["candidate"].value_counts()
+        cross = counts.index[0] if (not counts.empty and int(counts.iloc[0]) == 3) else None
+        for _, r in best.iterrows():
+            winner_rows.append(
+                {
+                    "output": output,
+                    "fixture_family": r["fixture_family"],
+                    "best_candidate": r["candidate"],
+                    "max_rel_error": r["max_rel_error"],
+                    "median_rel_error": r["median_rel_error"],
+                    "sign_agreement_rate": r["sign_agreement_rate"],
+                    "cross_family_winner": cross,
+                    "cross_family_winner_exists": bool(cross is not None),
+                }
+            )
+
+    winners = pd.DataFrame(winner_rows).sort_values(["output", "fixture_family"]).reset_index(drop=True)
+
+    # Explicit annular sign-pattern diagnostics for opposite-angle pairs.
+    ann = pd.DataFrame(annular_rows)
+    pair_rows = []
+    pairs = [(0.0, 180.0), (90.0, 270.0), (45.0, 225.0)]
+    if not ann.empty:
+        for (fixture, output, cand), grp in ann.groupby(["fixture", "output", "candidate"]):
+            by_angle = {float(r["V_deg"]): r for _, r in grp.iterrows()}
+            for a, b in pairs:
+                if a not in by_angle or b not in by_angle:
+                    continue
+                ra = by_angle[a]
+                rb = by_angle[b]
+                ref_opposite = bool(np.sign(float(ra["ref"])) == -np.sign(float(rb["ref"])))
+                calc_opposite = bool(np.sign(float(ra["calc"])) == -np.sign(float(rb["calc"])))
+                pair_rows.append(
+                    {
+                        "fixture": fixture,
+                        "output": output,
+                        "candidate": cand,
+                        "pair": f"{int(a)}_vs_{int(b)}",
+                        "ref_opposite_sign": ref_opposite,
+                        "calc_opposite_sign": calc_opposite,
+                        "match_ref_pattern": bool(ref_opposite == calc_opposite),
+                    }
+                )
+    annular_pairs = pd.DataFrame(pair_rows).sort_values(["fixture", "output", "candidate", "pair"]).reset_index(drop=True)
+    return detail, summary, winners, annular_pairs

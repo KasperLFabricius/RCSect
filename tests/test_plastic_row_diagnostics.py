@@ -10,6 +10,8 @@ from tests.plastic_diagnostics import (
     run_type6_prestress_mapping_study,
     choose_semantic_winners,
     choose_semantic_winners_by_family,
+    run_strain_definition_study,
+    run_dxdy_sign_transformation_study,
 )
 
 
@@ -233,9 +235,46 @@ def test_output_definition_study_reports_family_winners_and_cross_family_status(
     required_outputs = {"strain_mild", "strain_prestressed", "compress_force", "lever_L", "lever_DX", "lever_DY"}
     assert required_outputs.issubset(set(summary["output"]))
 
-    # Current corpus still indicates family-specific semantics for at least one blocking output.
+
+def test_strain_definition_study_tracks_family_winners_and_cross_family_status():
+    detail, summary, winners = run_strain_definition_study()
+
+    assert not detail.empty
+    assert not summary.empty
+    assert not winners.empty
+    assert set(summary["output"]) == {"strain_mild", "strain_prestressed"}
+    assert set(summary["fixture_family"]) == {"tbeam", "snit", "annular"}
+    assert {"source_bar_id", "candidate", "rel_error", "sign_agreement"}.issubset(detail.columns)
+
+    # Current corpus still indicates family-specific semantics for at least one blocking strain output.
     unresolved = winners.groupby("output")["cross_family_winner_exists"].first()
     assert (~unresolved).any()
+
+
+def test_dxdy_sign_transformation_study_includes_required_candidates_and_annular_pairs():
+    detail, summary, winners, annular_pairs = run_dxdy_sign_transformation_study()
+
+    assert not detail.empty
+    assert not summary.empty
+    assert not winners.empty
+    assert not annular_pairs.empty
+    assert set(summary["output"]) == {"lever_DX", "lever_DY", "lever_L"}
+    assert set(summary["fixture_family"]) == {"tbeam", "snit", "annular"}
+
+    required_candidates = {
+        "A_current_centroid_with_explicit_sign_flip",
+        "B_centroid_without_explicit_sign_flip",
+        "C_comp_to_tens_local_then_global",
+        "D_tens_to_comp_local_then_global",
+        "E_comp_to_tens_direct_global_no_flip",
+        "F_comp_to_tens_direct_global_with_flip",
+        "G_M_over_compress_surrogate_global",
+        "H_M_over_compress_surrogate_local_then_global",
+    }
+    assert required_candidates.issubset(set(detail["candidate"]))
+
+    assert set(annular_pairs["pair"]) == {"0_vs_180", "45_vs_225", "90_vs_270"}
+    assert {"ref_opposite_sign", "calc_opposite_sign", "match_ref_pattern"}.issubset(annular_pairs.columns)
 
 
 def test_zone_partition_study_artifact_data_is_available_and_comparable():

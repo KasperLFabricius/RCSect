@@ -26,6 +26,8 @@ from tests.plastic_diagnostics import (
     run_output_definition_study,
     run_zone_partition_study,
     run_type6_prestress_mapping_study,
+    run_strain_definition_study,
+    run_dxdy_sign_transformation_study,
 )
 
 
@@ -298,6 +300,8 @@ def main() -> None:
     type6_study = run_type6_prestress_mapping_study()
     semantics_detail, semantics_summary = run_output_semantics_study()
     definition_detail, definition_summary, definition_winners = run_output_definition_study()
+    strain_detail, strain_summary, strain_winners = run_strain_definition_study()
+    dxdy_detail, dxdy_summary, dxdy_winners, annular_pairs = run_dxdy_sign_transformation_study()
     zone_partition = run_zone_partition_study()
     semantic_winners = choose_semantic_winners(semantics_summary)
     family_winners = choose_semantic_winners_by_family(semantics_summary)
@@ -322,7 +326,11 @@ def main() -> None:
     definition_summary_md = out_dir / "plastic_output_definition_summary.md"
     zone_partition_csv = out_dir / "plastic_zone_partition_study.csv"
     zone_partition_md = out_dir / "plastic_zone_partition_summary.md"
-
+    strain_detail_csv = out_dir / "plastic_strain_definition_study.csv"
+    strain_summary_md = out_dir / "plastic_strain_definition_summary.md"
+    dxdy_detail_csv = out_dir / "plastic_dxdy_sign_transformation_study.csv"
+    dxdy_summary_md = out_dir / "plastic_dxdy_sign_transformation_summary.md"
+    annular_pair_csv = out_dir / "plastic_annular_dxdy_pair_checks.csv"
 
     legacy_shift_csv = out_dir / "plastic_legacy_shift.csv"
     legacy_shift_md = out_dir / "plastic_legacy_shift_summary.md"
@@ -359,6 +367,9 @@ def main() -> None:
     family_winners.to_csv(semantics_family_csv, index=False)
     definition_detail.to_csv(definition_detail_csv, index=False)
     zone_partition.to_csv(zone_partition_csv, index=False)
+    strain_detail.to_csv(strain_detail_csv, index=False)
+    dxdy_detail.to_csv(dxdy_detail_csv, index=False)
+    annular_pairs.to_csv(annular_pair_csv, index=False)
 
     referenced = detail[detail["Mx_ref"].notna()][
         [
@@ -413,6 +424,20 @@ def main() -> None:
     md += "\n\n## Sub-1% readiness by fixture family and output group (after semantic alignment)\n\n"
     md += _markdown_table(grouped_readiness)
     md += "\n\nConclusion: " + conclusion + "\n"
+
+    strain_summary = strain_winners[["output", "fixture_family", "best_candidate", "cross_family_winner", "cross_family_winner_exists", "max_rel_error", "median_rel_error"]]
+    md_strain = "# Plastic Strain Definition Study\n\n"
+    md_strain += "COMPRESS FORCE is no longer the main blocker on this branch; this study isolates remaining strain output semantics.\n\n"
+    md_strain += "## Best candidate per family\n\n" + _markdown_table(strain_summary) + "\n\n"
+    md_strain += "## Candidate score summary\n\n" + _markdown_table(strain_summary if strain_summary.empty else strain_summary) + "\n"
+    strain_summary_md.write_text(md_strain)
+
+    dxdy_family = dxdy_winners[["output", "fixture_family", "best_candidate", "cross_family_winner", "cross_family_winner_exists", "max_rel_error", "median_rel_error"]]
+    md_dxdy = "# Plastic DX/DY Sign and Transformation Study\n\n"
+    md_dxdy += "COMPRESS FORCE is no longer the main blocker on this branch; this study isolates lever-arm sign/transformation semantics (DX, DY, L).\n\n"
+    md_dxdy += "## Best candidate per family\n\n" + _markdown_table(dxdy_family) + "\n\n"
+    md_dxdy += "## Annular opposite-angle sign checks (0↔180, 90↔270, 45↔225)\n\n" + _markdown_table(annular_pairs) + "\n"
+    dxdy_summary_md.write_text(md_dxdy)
 
     prior_mx, prior_my = _max_rel_errors(prior_summary)
     cur_mx, cur_my = _max_rel_errors(summary)
