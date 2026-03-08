@@ -1,54 +1,278 @@
 import numpy as np
 
-class Concrete:
+
+class ConcreteType1:
+    """Legacy PCROSS concrete family type 1 (benchmark-needed diagram).
+
+    Sign convention in this codebase:
+    - material law input strain uses fraction form (e.g. 0.0035 == 0.35%)
+    - compression is positive
+    - tension carries zero stress
+
+    Manual figure uses e in percent. We therefore convert with e_pct = 100*eps.
+    Characteristic diagram:
+      E0 = 51*f_c/(13+f_c)
+      0 <= e < 0.2: f = 10*E0*e + 100*(3/4*f_c - E0)*e^2 + 250*(E0 - f_c)*e^3
+      0.2 <= e < 0.35: f = f_c
+    Design diagram is sigma = f / gamma_c.
     """
-    Eurocode 2 Parabola-Rectangle Concrete Model (EN 1992-1-1:2004 Section 3.1.7).
-    Strains are treated as positive for compression.
-    """
-    def __init__(self, f_ck: float, gamma_c: float = 1.45, alpha_cc: float = 1.0):
-        self.f_ck = f_ck
-        self.gamma_c = gamma_c
-        self.alpha_cc = alpha_cc
-        self.f_cd = self.alpha_cc * self.f_ck / self.gamma_c
-        
-        # Eurocode 2 definitions for standard vs high-strength concrete
-        if self.f_ck <= 50.0:
-            self.eps_c2 = 2.0 / 1000.0
-            self.eps_cu2 = 3.5 / 1000.0
-            self.n = 2.0
-        else:
-            self.eps_c2 = (2.0 + 0.085 * (self.f_ck - 50.0)**0.53) / 1000.0
-            self.eps_cu2 = (2.6 + 35.0 * ((90.0 - self.f_ck) / 100.0)**4) / 1000.0
-            self.n = 1.4 + 23.4 * ((90.0 - self.f_ck) / 100.0)**4
+
+    def __init__(self, fck: float = None, gamma_c: float = 1.45, alpha_cc: float = 1.0, f_ck: float = None):
+        if fck is None:
+            fck = f_ck
+        if fck is None:
+            raise ValueError("ConcreteType1 requires fck or f_ck")
+
+        self.fck = float(fck)
+        self.f_ck = self.fck  # compatibility alias
+        self.gamma_c = float(gamma_c)
+        self.alpha_cc = float(alpha_cc)
+
+        # Keep this compatibility attribute used in existing warnings/diagnostics.
+        self.f_cd = self.alpha_cc * self.fck / self.gamma_c
+
+        # Existing solver pivot logic uses these limits (fraction units).
+        self.eps_c2 = 0.002
+        self.eps_cu2 = 0.0035
 
     def stress(self, eps: np.ndarray) -> np.ndarray:
-        """
-        Calculates the concrete compressive stress for a given array of strains.
-        Tensile strains (eps < 0) return 0.0.
-        """
-        eps = np.asarray(eps)
-        sigma = np.zeros_like(eps, dtype=float)
-        
-        # Parabolic branch
-        mask_parabola = (eps >= 0.0) & (eps < self.eps_c2)
-        sigma[mask_parabola] = self.f_cd * (1.0 - (1.0 - eps[mask_parabola] / self.eps_c2)**self.n)
-        
-        # Rectangular branch
-        mask_rect = (eps >= self.eps_c2) & (eps <= self.eps_cu2)
-        sigma[mask_rect] = self.f_cd
-        
-        # Crushed concrete (strain exceeds ultimate limit)
-        mask_crush = eps > self.eps_cu2
-        sigma[mask_crush] = 0.0
-        
+        eps_arr = np.asarray(eps, dtype=float)
+        e_pct = 100.0 * eps_arr
+
+        sigma = np.zeros_like(eps_arr, dtype=float)
+
+        mask_cubic = (e_pct >= 0.0) & (e_pct < 0.2)
+        if np.any(mask_cubic):
+            E0 = 51.0 * self.fck / (13.0 + self.fck)
+            e = e_pct[mask_cubic]
+            f_char = (
+                10.0 * E0 * e
+                + 100.0 * ((0.75 * self.fck) - E0) * e**2
+                + 250.0 * (E0 - self.fck) * e**3
+            )
+            sigma[mask_cubic] = (self.alpha_cc * f_char) / self.gamma_c
+
+        mask_plateau = (e_pct >= 0.2) & (e_pct <= 0.35)
+        sigma[mask_plateau] = (self.alpha_cc * self.fck) / self.gamma_c
+
+        # e_pct < 0 (tension) and e_pct >= 0.35 (crushed) stay at zero.
         return sigma
 
-class MildSteel:
+
+class MildSteelType1:
+    """Legacy PCROSS mild reinforcement family type 1 (benchmark-needed diagram)."""
+
+    def __init__(
+        self,
+        *,
+        fytk: float,
+        fyck: float,
+        eut: float,
+        futk: float,
+        gamma_y: float,
+        gamma_u: float,
+        gamma_E: float,
+        E_modulus: float = 2.0e5,
+        include_hardening: bool = True,
+    ):
+        self.fytk = float(fytk)
+        self.fyck = float(fyck)
+        self.eut = float(eut)
+        self.futk = float(futk)
+        self.gamma_y = float(gamma_y)
+        self.gamma_u = float(gamma_u)
+        self.gamma_E = float(gamma_E)
+
+        self.E_k = float(E_modulus)
+        self.E_s = self.E_k / self.gamma_E
+
+        self.f_yd_t = self.fytk / self.gamma_y
+        self.f_yd_c = self.fyck / self.gamma_y
+        self.eps_yd_t = self.f_yd_t / self.E_s
+        self.eps_yd_c = self.f_yd_c / self.E_s
+
+        # Design hardening endpoint per provided figure interpretation.
+        self.f_ud_t = self.futk / self.gamma_u
+        self.eps_ud = self.eut
+
+        # include_hardening kept only for API compatibility;
+        # type-1 benchmark path always uses the figure-defined hardening branch.
+
+        # Compatibility aliases
+        self.gamma_s = self.gamma_y
+        self.f_yk = self.fytk
+        self.f_yk_t = self.fytk
+        self.f_yk_c = self.fyck
+
+    def stress(self, eps: np.ndarray) -> np.ndarray:
+        eps_arr = np.asarray(eps, dtype=float)
+        sigma = np.zeros_like(eps_arr, dtype=float)
+
+        # Tension side: elastic -> linear hardening to (eut, futk/gamma_u).
+        mask_t = eps_arr >= 0.0
+        if np.any(mask_t):
+            e_t = eps_arr[mask_t]
+            sigma_t = np.empty_like(e_t)
+
+            mask_t_el = e_t <= self.eps_yd_t
+            sigma_t[mask_t_el] = self.E_s * e_t[mask_t_el]
+
+            mask_t_hard = ~mask_t_el
+            if np.any(mask_t_hard):
+                if self.eut > self.eps_yd_t:
+                    slope = (self.f_ud_t - self.f_yd_t) / (self.eut - self.eps_yd_t)
+                    e_h = np.minimum(e_t[mask_t_hard], self.eut)
+                    sigma_t[mask_t_hard] = self.f_yd_t + slope * (e_h - self.eps_yd_t)
+                else:
+                    sigma_t[mask_t_hard] = self.f_yd_t
+
+            sigma[mask_t] = sigma_t
+
+        # Compression side: elastic -> constant -fyck/gamma_y.
+        mask_c = eps_arr < 0.0
+        if np.any(mask_c):
+            e_c_abs = np.abs(eps_arr[mask_c])
+            sigma_c = np.empty_like(e_c_abs)
+
+            mask_c_el = e_c_abs <= self.eps_yd_c
+            sigma_c[mask_c_el] = -self.E_s * e_c_abs[mask_c_el]
+            sigma_c[~mask_c_el] = -self.f_yd_c
+            sigma[mask_c] = sigma_c
+
+        return sigma
+
+
+class PrestressedSteelType1:
+    """Legacy PCROSS prestressed steel family type 1 (figure-based).
+
+    IS is initial prestress strain in percent from material input.
+    Internal solver strain is fraction, so initial strain fraction is IS/100.
+
+    Figure defines only tension side; compression is clamped to zero.
+    Design stresses are characteristic ordinates divided by gamma_y.
     """
-    Eurocode 2 Mild Reinforcing Steel Model.
-    Supports both horizontal top branch and inclined strain-hardening branch.
-    Strains are treated as positive for tension.
+
+    RES_PCT = 3.5
+
+    def __init__(
+        self,
+        *,
+        IS: float,
+        gamma_y: float,
+        gamma_u: float = 1.0,
+        gamma_E: float = 1.0,
+    ):
+        self.IS = float(IS)
+        self.gamma_y = float(gamma_y)
+        self.gamma_u = float(gamma_u)
+        self.gamma_E = float(gamma_E)
+
+        self.initial_strain = self.IS / 100.0
+
+        # Compatibility attributes used elsewhere in diagnostics.
+        self.E_p = 2.0e5 / self.gamma_E
+        self.eps_ud = self.RES_PCT / 100.0
+        self.gamma_s = self.gamma_y
+
+    def stress(self, total_eps: np.ndarray) -> np.ndarray:
+        eps_arr = np.asarray(total_eps, dtype=float)
+        e_pct = 100.0 * eps_arr
+
+        sigma = np.zeros_like(eps_arr, dtype=float)
+
+        # Tension-side-only definition from embedded benchmark figure.
+        # For e_pct < 0 (compression), stress remains zero.
+        mask1 = (e_pct >= 0.0) & (e_pct < 0.6)
+        sigma[mask1] = (2000.0 * e_pct[mask1]) / self.gamma_y
+
+        mask2 = (e_pct >= 0.6) & (e_pct < 1.0)
+        e = e_pct[mask2]
+        sigma[mask2] = (-2500.0 * e**2 + 5000.0 * e - 900.0) / self.gamma_y
+
+        mask3 = (e_pct >= 1.0) & (e_pct < 1.75)
+        sigma[mask3] = (60.0 * e_pct[mask3] + 1540.0) / self.gamma_y
+
+        mask4 = (e_pct >= 1.75) & (e_pct <= self.RES_PCT)
+        sigma[mask4] = 1645.0 / self.gamma_y
+
+        # Above RES we treat as rupture for benchmark path: zero stress.
+        return sigma
+
+
+class PrestressedSteelType6:
+    """Legacy PCROSS prestressed steel family type 6 (figure-consistent).
+
+    IS is initial prestress strain in percent from material input.
+    Compression side carries zero stress.
     """
+
+    def __init__(
+        self,
+        *,
+        IS: float,
+        fytk: float,
+        futk: float,
+        eut: float,
+        gamma_y: float,
+        gamma_u: float,
+        gamma_E: float,
+        E_modulus: float = 2.0e5,
+    ):
+        self.IS = float(IS)
+        self.fytk = float(fytk)
+        self.futk = float(futk)
+        self.eut = float(eut)
+        self.gamma_y = float(gamma_y)
+        self.gamma_u = float(gamma_u)
+        self.gamma_E = float(gamma_E)
+
+        self.initial_strain = self.IS / 100.0
+
+        self.E_k = float(E_modulus)
+        self.E_p = self.E_k / self.gamma_E
+
+        self.f_pd = self.fytk / self.gamma_y
+        self.f_ud = self.futk / self.gamma_u
+        self.eps_pd = self.f_pd / self.E_p
+        self.eps_ud = self.eut
+
+        self.gamma_s = self.gamma_y
+
+    def stress(self, total_eps: np.ndarray) -> np.ndarray:
+        eps_arr = np.asarray(total_eps, dtype=float)
+        sigma = np.zeros_like(eps_arr, dtype=float)
+
+        mask_t = eps_arr > 0.0
+        if not np.any(mask_t):
+            return sigma
+
+        e_t = eps_arr[mask_t]
+        sigma_t = np.empty_like(e_t)
+
+        mask_el = e_t <= self.eps_pd
+        sigma_t[mask_el] = self.E_p * e_t[mask_el]
+
+        mask_hard = ~mask_el
+        if np.any(mask_hard):
+            if self.eut > self.eps_pd:
+                slope = (self.f_ud - self.f_pd) / (self.eut - self.eps_pd)
+                e_h = np.minimum(e_t[mask_hard], self.eut)
+                sigma_t[mask_hard] = self.f_pd + slope * (e_h - self.eps_pd)
+            else:
+                sigma_t[mask_hard] = self.f_pd
+
+        # Above eut: clamp to zero (no extra branches beyond defined segment).
+        sigma_t[e_t > self.eut] = 0.0
+
+        sigma[mask_t] = sigma_t
+        return sigma
+
+
+# Backward-compatibility aliases used by existing non-benchmark code/tests.
+Concrete = ConcreteType1
+
+
+class MildSteel(MildSteelType1):
     def __init__(
         self,
         f_yk: float,
@@ -62,107 +286,41 @@ class MildSteel:
         f_yk_t: float = None,
         f_yk_c: float = None,
     ):
-        self.f_yk = f_yk
-        self.f_yk_t = f_yk if f_yk_t is None else f_yk_t
-        self.f_yk_c = f_yk if f_yk_c is None else f_yk_c
-        self.gamma_s = gamma_s
-        self.gamma_E = gamma_E
-        self.gamma_u = gamma_u
-        self.E_s = E_s / self.gamma_E
-        self.f_yd_t = self.f_yk_t / self.gamma_s
-        self.f_yd_c = self.f_yk_c / self.gamma_s
-        self.eps_yd_t = self.f_yd_t / self.E_s
-        self.eps_yd_c = self.f_yd_c / self.E_s
-        self.eps_ud = 0.9 * e_uk / self.gamma_u  # Optional benchmark mapping for gamma_u
+        super().__init__(
+            fytk=f_yk if f_yk_t is None else f_yk_t,
+            fyck=f_yk if f_yk_c is None else f_yk_c,
+            eut=e_uk,
+            futk=f_uk if f_uk is not None else f_yk,
+            gamma_y=gamma_s,
+            gamma_u=gamma_u,
+            gamma_E=gamma_E,
+            E_modulus=E_s,
+            include_hardening=include_hardening,
+        )
 
-        self.include_hardening = include_hardening
-        if self.include_hardening and f_uk is not None:
-            self.k = f_uk / f_yk
-            self.f_ud_t = (self.k * self.f_yk_t) / (self.gamma_s * self.gamma_u)
-            self.f_ud_c = (self.k * self.f_yk_c) / (self.gamma_s * self.gamma_u)
-        else:
-            self.f_ud_t = self.f_yd_t
-            self.f_ud_c = self.f_yd_c
 
-    def stress(self, eps: np.ndarray) -> np.ndarray:
-        """
-        Calculates the steel stress for a given array of strains.
-        Handles both tension (positive) and compression (negative).
-        """
-        eps = np.asarray(eps)
-        abs_eps = np.abs(eps)
-        sigma = np.zeros_like(eps, dtype=float)
-
-        mask_tension = eps >= 0.0
-        mask_compression = eps < 0.0
-
-        # Elastic branches
-        mask_elastic_t = mask_tension & (eps <= self.eps_yd_t)
-        mask_elastic_c = mask_compression & (abs_eps <= self.eps_yd_c)
-        sigma[mask_elastic_t] = eps[mask_elastic_t] * self.E_s
-        sigma[mask_elastic_c] = eps[mask_elastic_c] * self.E_s
-
-        # Yield / hardening branches
-        mask_yield_t = mask_tension & (eps > self.eps_yd_t) & (eps <= self.eps_ud)
-        mask_yield_c = mask_compression & (abs_eps > self.eps_yd_c) & (abs_eps <= self.eps_ud)
-        if self.include_hardening:
-            slope_t = 0.0 if self.eps_ud == self.eps_yd_t else (self.f_ud_t - self.f_yd_t) / (self.eps_ud - self.eps_yd_t)
-            slope_c = 0.0 if self.eps_ud == self.eps_yd_c else (self.f_ud_c - self.f_yd_c) / (self.eps_ud - self.eps_yd_c)
-            sigma[mask_yield_t] = self.f_yd_t + slope_t * (eps[mask_yield_t] - self.eps_yd_t)
-            sigma[mask_yield_c] = -(self.f_yd_c + slope_c * (abs_eps[mask_yield_c] - self.eps_yd_c))
-        else:
-            sigma[mask_yield_t] = self.f_yd_t
-            sigma[mask_yield_c] = -self.f_yd_c
-
-        # Ruptured steel
-        mask_rupture = abs_eps > self.eps_ud
-        sigma[mask_rupture] = 0.0
-
-        return sigma
-
-class PrestressedSteel:
-    """
-    Prestressing steel stress-strain model.
-
-    The solver is responsible for assembling total bar strain, including any
-    prestress initial strain offsets.
-    """
-    def __init__(self, f_p01k: float, f_pk: float, e_uk: float, gamma_s: float = 1.20, E_p: float = 195000.0, initial_strain: float = 0.0, gamma_E: float = 1.0, gamma_u: float = 1.0):
-        self.f_p01k = f_p01k
-        self.f_pk = f_pk
-        # Backward-compatibility only: solver now applies per-bar initial strain.
-        self.initial_strain = initial_strain
-        self.gamma_s = gamma_s
-        self.gamma_E = gamma_E
-        self.gamma_u = gamma_u
-        self.E_p = E_p / self.gamma_E
-        
-        self.f_pd = self.f_p01k / self.gamma_s
-        self.eps_pd = self.f_pd / self.E_p
-        
-        # Design ultimate strain limit per EC2 (typically 0.9 * characteristic limit)
-        self.eps_ud = 0.9 * e_uk / self.gamma_u
-        
-    def stress(self, total_eps: np.ndarray) -> np.ndarray:
-        """
-        Calculates prestressing steel stress from total bar strain.
-        """
-        total_eps = np.asarray(total_eps)
-        sigma = np.zeros_like(total_eps, dtype=float)
-        
-        abs_eps = np.abs(total_eps)
-        sign_eps = np.sign(total_eps)
-        
-        # Elastic branch
-        mask_elastic = abs_eps <= self.eps_pd
-        sigma[mask_elastic] = total_eps[mask_elastic] * self.E_p
-        
-        # Yield branch (Horizontal per idealized EC2 model)
-        mask_yield = (abs_eps > self.eps_pd) & (abs_eps <= self.eps_ud)
-        sigma[mask_yield] = sign_eps[mask_yield] * self.f_pd
-        
-        # Ruptured steel
-        mask_rupture = abs_eps > self.eps_ud
-        sigma[mask_rupture] = 0.0
-        
-        return sigma
+class PrestressedSteel(PrestressedSteelType6):
+    def __init__(
+        self,
+        f_p01k: float,
+        f_pk: float,
+        e_uk: float,
+        gamma_s: float = 1.20,
+        E_p: float = 195000.0,
+        initial_strain: float = 0.0,
+        gamma_E: float = 1.0,
+        gamma_u: float = 1.0,
+    ):
+        super().__init__(
+            IS=100.0 * float(initial_strain),
+            fytk=f_p01k,
+            futk=f_pk,
+            eut=e_uk,
+            gamma_y=gamma_s,
+            gamma_u=gamma_u,
+            gamma_E=gamma_E,
+            E_modulus=E_p,
+        )
+        self.f_p01k = float(f_p01k)
+        self.f_pk = float(f_pk)
+        self.e_uk = float(e_uk)

@@ -1,7 +1,7 @@
 import numpy as np
 
 from core.geometry import CrossSection
-from core.materials import Concrete, MildSteel
+from core.materials import Concrete, MildSteel, ConcreteType1, MildSteelType1, PrestressedSteelType1
 from core.solver_plastic import PlasticSolver
 from tests.benchmark_compare import BenchmarkSweepSpec, run_benchmark_sweeps
 from tests.pcross_benchmark_fixture import (
@@ -25,6 +25,14 @@ def _detailed_benchmark_df(mapping=DEFAULT_BENCHMARK_MAPPING):
 
 
 
+
+
+
+def test_fixture_builders_use_legacy_family_material_classes():
+    solver = build_pcross_tbeam_solver(prestress_eps0=0.004, mapping=DEFAULT_BENCHMARK_MAPPING)
+    assert isinstance(solver.concrete, ConcreteType1)
+    assert isinstance(solver.mild_steel, MildSteelType1)
+    assert isinstance(solver.prestressed_steel, PrestressedSteelType1)
 
 def test_manual_benchmark_mapping_factors_are_applied_in_fixture():
     mapping = BENCHMARK_MAPPINGS[DEFAULT_BENCHMARK_MAPPING]
@@ -237,3 +245,81 @@ def test_extended_fixture_sweeps_have_signed_moment_coverage():
         refs = df[df["Mx_ref"].notna()]
         assert not refs.empty
         assert refs[refs["Mx_ref"].abs() > 1e-9]["sign_agreement_Mx"].all()
+
+
+def test_compress_force_is_direct_sum_of_compression_partitions():
+    case = EMBEDDED_BENCHMARK_CASES["snit_a"]
+    result = case.solver_builder().solve(angle_v_deg=90.0, P_target=case.load.P_target)
+
+    comp_total = result["compress_zone_force_total"]
+    comp_parts = (
+        result["compress_zone_force_concrete"]
+        + result["compress_zone_force_mild"]
+        + result["compress_zone_force_prestressed"]
+    )
+    assert np.isclose(comp_total, comp_parts, rtol=0.0, atol=1e-9)
+    assert np.isclose(result["compress_force"], comp_total, rtol=0.0, atol=1e-9)
+
+
+def test_lever_arm_is_centroid_vector_and_not_m_over_compress_override():
+    case = EMBEDDED_BENCHMARK_CASES["snit_a"]
+    angle = 90.0
+    result = case.solver_builder().solve(angle_v_deg=angle, P_target=case.load.P_target)
+
+    c = result["debug_resultant_centroids"]
+    dx_local = c["tension_zone_centroid_x"] - c["compress_zone_centroid_x"]
+    dy_local = c["tension_zone_centroid_y"] - c["compress_zone_centroid_y"]
+
+    angle_rad = np.radians(case.solver_builder().cs.local_rotation_deg(angle))
+    cos_a = np.cos(angle_rad)
+    sin_a = np.sin(angle_rad)
+    dx_global = dx_local * cos_a - dy_local * sin_a
+    dy_global = dx_local * sin_a + dy_local * cos_a
+
+    # Annular-sign re-anchoring keeps DX as comp->tension sign and flips DY only.
+    assert np.isclose(result["lever_DX"], dx_global, rtol=0.0, atol=1e-9)
+    assert np.isclose(result["lever_DY"], -dy_global, rtol=0.0, atol=1e-9)
+    assert np.isclose(result["lever_L"], np.hypot(dx_global, dy_global), rtol=0.0, atol=1e-9)
+
+    # Guardrail: benchmark-critical path should not force moment/compress surrogate.
+    dy_from_m = result["Mx"] / max(result["compress_force"], 1e-9)
+    assert abs(result["lever_DY"] - dy_from_m) > 1e-4
+
+
+def test_strain_outputs_follow_governing_force_bars_with_total_strain():
+    case = EMBEDDED_BENCHMARK_CASES["snit_a"]
+    result = case.solver_builder().solve(angle_v_deg=90.0, P_target=case.load.P_target)
+    dbg = result["debug_force_components"]
+    sc = result["debug_strain_candidates"]
+
+    mild = max(dbg["mild_bar_details"], key=lambda r: abs(r["force_kN"]))
+    assert sc["strain_mild_governing_force_bar_id"] == mild["id"]
+    assert np.isclose(result["strain_mild"], -mild["strain_total"] * 1000.0, rtol=0.0, atol=1e-9)
+
+    prest = max(dbg["prestressed_bar_details"], key=lambda r: abs(r["force_kN"]))
+    assert sc["strain_prestressed_governing_force_bar_id"] == prest["id"]
+    assert np.isclose(result["strain_prestressed"], -prest["strain_total"] * 1000.0, rtol=0.0, atol=1e-9)
+    assert not np.isclose(result["strain_prestressed"], prest["strain_incremental"] * 1000.0, rtol=0.0, atol=1e-6)
+
+
+def test_annular_dxdy_sign_symmetry_pairs_follow_reference_pattern():
+    for key in ["section0", "sectioniv"]:
+        case = EMBEDDED_BENCHMARK_CASES[key]
+        solver = case.solver_builder()
+        rows = {float(r["angle_v_deg"]): r for r in solver.solve_angle_sweep(case.load.angles_deg, case.load.P_target)}
+
+        for a, b in [(0.0, 180.0), (90.0, 270.0), (45.0, 225.0)]:
+            ra = rows[a]
+            rb = rows[b]
+            refa = case.reference_rows[(case.load_case, a)]
+            refb = case.reference_rows[(case.load_case, b)]
+
+            ref_dx_a = float(refa.get("lever_DX", refa.get("DX", np.nan)))
+            ref_dx_b = float(refb.get("lever_DX", refb.get("DX", np.nan)))
+            ref_dy_a = float(refa.get("lever_DY", refa.get("DY", np.nan)))
+            ref_dy_b = float(refb.get("lever_DY", refb.get("DY", np.nan)))
+
+            if abs(ref_dx_a) > 1e-9 and abs(ref_dx_b) > 1e-9:
+                assert np.sign(float(ra["lever_DX"])) == -np.sign(float(rb["lever_DX"]))
+            if abs(ref_dy_a) > 1e-9 and abs(ref_dy_b) > 1e-9:
+                assert np.sign(float(ra["lever_DY"])) == -np.sign(float(rb["lever_DY"]))

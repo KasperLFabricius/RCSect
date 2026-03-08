@@ -1,19 +1,19 @@
 fixture_family,output_group,max_rel_err,band
-annular,compression force,0.002895597231681938,<1%
-annular,curvature,0.006173773436443466,<1%
-annular,lever-arms,2.4179749321480672,>5%
-annular,moments,0.006124792013084018,<1%
-annular,strains,2.0127595977897648,>5%
+annular,compression force,0.0007635971565132672,<1%
+annular,curvature,0.001495696648268048,<1%
+annular,lever-arms,2.42050482258475,>5%
+annular,moments,0.0011384064992120775,<1%
+annular,strains,1.4514925034569215,>5%
 annular,warnings,,match=1.000
-snit,compression force,1.8031324908629793,>5%
-snit,curvature,0.017285232770556512,1-5%
-snit,lever-arms,1.402944820342888,>5%
-snit,moments,0.01544923061090369,1-5%
-snit,strains,2.064979612190433,>5%
+snit,compression force,1.7945786894858,>5%
+snit,curvature,0.0047956443531201095,<1%
+snit,lever-arms,1.4047534180200494,>5%
+snit,moments,0.010566743050442712,1-5%
+snit,strains,2.5172367057585783,>5%
 snit,warnings,,N/A
 tbeam,compression force,,N/A
 tbeam,curvature,,N/A
 tbeam,lever-arms,,N/A
-tbeam,moments,0.07473616156367238,>5%
+tbeam,moments,0.00011251455858352603,<1%
 tbeam,strains,,N/A
 tbeam,warnings,,N/A

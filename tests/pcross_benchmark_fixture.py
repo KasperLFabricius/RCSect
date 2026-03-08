@@ -10,7 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from core.geometry import CrossSection
-from core.materials import Concrete, MildSteel, PrestressedSteel
+from core.materials import (
+    ConcreteType1,
+    MildSteelType1,
+    PrestressedSteelType1,
+    PrestressedSteelType6,
+)
 from core.solver_plastic import PlasticSolver
 
 
@@ -42,7 +47,7 @@ PRE_BAR_POINTS = [(0.0, -0.38), (0.0, -0.54)]
 
 
 @dataclass(frozen=True)
-class BenchmarkMaterialMapping:
+class LegacyPCrossFactors:
     name: str
     gamma_c: float
     gamma_s: float
@@ -51,22 +56,22 @@ class BenchmarkMaterialMapping:
     gamma_u: float = 1.0
 
 
-BENCHMARK_MAPPINGS: dict[str, BenchmarkMaterialMapping] = {
-    "case_a_baseline": BenchmarkMaterialMapping(
+LEGACY_PCROSS_FACTORS: dict[str, LegacyPCrossFactors] = {
+    "case_a_baseline": LegacyPCrossFactors(
         name="case_a_baseline", gamma_c=1.50, gamma_s=1.15, gamma_p=1.15, gamma_E=1.0, gamma_u=1.0
     ),
-    "case_b_manual_strength": BenchmarkMaterialMapping(
+    "case_b_manual_strength": LegacyPCrossFactors(
         name="case_b_manual_strength", gamma_c=1.90, gamma_s=1.50, gamma_p=1.50, gamma_E=1.0, gamma_u=1.0
     ),
-    "case_c_manual_strength_plus_fe": BenchmarkMaterialMapping(
+    "case_c_manual_strength_plus_fe": LegacyPCrossFactors(
         name="case_c_manual_strength_plus_fe", gamma_c=1.90, gamma_s=1.50, gamma_p=1.50, gamma_E=1.50, gamma_u=1.0
     ),
-    "case_d_manual_strength_plus_fe_fu": BenchmarkMaterialMapping(
+    "case_d_manual_strength_plus_fe_fu": LegacyPCrossFactors(
         name="case_d_manual_strength_plus_fe_fu", gamma_c=1.90, gamma_s=1.50, gamma_p=1.50, gamma_E=1.50, gamma_u=1.50
     ),
 }
 
-DEFAULT_BENCHMARK_MAPPING = "case_d_manual_strength_plus_fe_fu"
+DEFAULT_LEGACY_PCROSS_FACTOR_SET = "case_d_manual_strength_plus_fe_fu"
 
 
 def _build_mild_bars():
@@ -76,55 +81,60 @@ def _build_mild_bars():
     ]
 
 
-def _build_prestress_bars(eps0: float):
+def _build_prestress_bars():
     return [
-        {"id": f"P{i+1}", "x": x, "y": y, "area": PRE_BAR_AREA, "eps0": eps0}
+        {"id": f"P{i+1}", "x": x, "y": y, "area": PRE_BAR_AREA}
         for i, (x, y) in enumerate(PRE_BAR_POINTS)
     ]
 
 
-def resolve_benchmark_mapping(mapping: str | BenchmarkMaterialMapping | None) -> BenchmarkMaterialMapping:
+def resolve_legacy_pcross_factors(mapping: str | LegacyPCrossFactors | None) -> LegacyPCrossFactors:
     if mapping is None:
-        return BENCHMARK_MAPPINGS[DEFAULT_BENCHMARK_MAPPING]
-    if isinstance(mapping, BenchmarkMaterialMapping):
+        return LEGACY_PCROSS_FACTORS[DEFAULT_LEGACY_PCROSS_FACTOR_SET]
+    if isinstance(mapping, LegacyPCrossFactors):
         return mapping
-    if mapping not in BENCHMARK_MAPPINGS:
+    if mapping not in LEGACY_PCROSS_FACTORS:
         raise ValueError(f"Unknown benchmark mapping '{mapping}'")
-    return BENCHMARK_MAPPINGS[mapping]
+    return LEGACY_PCROSS_FACTORS[mapping]
 
+
+
+# Backward-compatibility aliases retained for diagnostics/tools imports.
+BENCHMARK_MAPPINGS = LEGACY_PCROSS_FACTORS
+DEFAULT_BENCHMARK_MAPPING = DEFAULT_LEGACY_PCROSS_FACTOR_SET
+BenchmarkMaterialMapping = LegacyPCrossFactors
+resolve_benchmark_mapping = resolve_legacy_pcross_factors
 
 def build_pcross_tbeam_solver(
     prestress_eps0: float = 0.004,
-    mapping: str | BenchmarkMaterialMapping | None = None,
+    mapping: str | LegacyPCrossFactors | None = None,
 ) -> PlasticSolver:
-    benchmark_mapping = resolve_benchmark_mapping(mapping)
+    benchmark_mapping = resolve_legacy_pcross_factors(mapping)
 
     cs = CrossSection(
         concrete_outline=CONCRETE_OUTLINE,
         concrete_voids=[],
         rebar_mild=_build_mild_bars(),
-        rebar_prestressed=_build_prestress_bars(prestress_eps0),
+        rebar_prestressed=_build_prestress_bars(),
     )
 
     return PlasticSolver(
         cross_section=cs,
-        concrete=Concrete(f_ck=18.0, gamma_c=benchmark_mapping.gamma_c),
-        mild_steel=MildSteel(
-            f_yk=225.0,
-            e_uk=0.20,
-            gamma_s=benchmark_mapping.gamma_s,
+        concrete=ConcreteType1(fck=18.0, gamma_c=benchmark_mapping.gamma_c),
+        mild_steel=MildSteelType1(
+            fytk=225.0,
+            fyck=225.0,
+            futk=225.0,
+            eut=0.20,
+            gamma_y=benchmark_mapping.gamma_s,
             gamma_E=benchmark_mapping.gamma_E,
             gamma_u=benchmark_mapping.gamma_u,
         ),
-        prestressed_steel=PrestressedSteel(
-            f_p01k=1500.0,
-            f_pk=1700.0,
-            e_uk=0.035,
-            E_p=195000.0,
-            gamma_s=benchmark_mapping.gamma_p,
+        prestressed_steel=PrestressedSteelType1(
+            IS=100.0 * prestress_eps0,
+            gamma_y=benchmark_mapping.gamma_p,
             gamma_E=benchmark_mapping.gamma_E,
             gamma_u=benchmark_mapping.gamma_u,
-            initial_strain=0.0,
         ),
     )
 
@@ -205,7 +215,7 @@ def resolve_type6_mapping(mapping: str | Type6PrestressMapping | None) -> Type6P
     return TYPE6_PRESTRESS_MAPPINGS[mapping]
 
 def _build_pre_bars(points):
-    return [{"id": f"P{i+1}", "x": x, "y": y, "area": a, "eps0": 0.0059} for i, (x, y, a) in enumerate(points)]
+    return [{"id": f"P{i+1}", "x": x, "y": y, "area": a} for i, (x, y, a) in enumerate(points)]
 
 
 def _build_strip_solver(pre_points, p_target, type6_mapping: str | Type6PrestressMapping | None = None):
@@ -218,27 +228,26 @@ def _build_strip_solver(pre_points, p_target, type6_mapping: str | Type6Prestres
     )
     solver = PlasticSolver(
         cross_section=cs,
-        concrete=Concrete(f_ck=43.8, gamma_c=1.53),
-        mild_steel=MildSteel(
-            f_yk=550.0,
-            f_yk_t=550.0,
-            f_yk_c=550.0,
-            e_uk=0.025,
-            f_uk=550.0,
+        concrete=ConcreteType1(fck=43.8, gamma_c=1.53),
+        mild_steel=MildSteelType1(
+            fytk=550.0,
+            fyck=550.0,
+            futk=550.0,
+            eut=0.025,
             include_hardening=True,
-            gamma_s=1.12,
+            gamma_y=1.12,
             gamma_u=mapping.gamma_u,
             gamma_E=mapping.gamma_E,
         ),
-        prestressed_steel=PrestressedSteel(
-            f_p01k=1550.0,
-            f_pk=1770.0,
-            e_uk=0.035,
-            E_p=200000.0,
-            gamma_s=1.12,
+        prestressed_steel=PrestressedSteelType6(
+            IS=0.59,
+            fytk=1550.0,
+            futk=1770.0,
+            eut=0.035,
+            E_modulus=200000.0,
+            gamma_y=1.12,
             gamma_u=mapping.gamma_u,
             gamma_E=mapping.gamma_E,
-            initial_strain=0.0,
         ),
     )
     return solver
@@ -282,15 +291,14 @@ def _build_annular_solver(outer, inner, bars, bar_area):
     )
     return PlasticSolver(
         cross_section=cs,
-        concrete=Concrete(f_ck=40.0, gamma_c=1.50),
-        mild_steel=MildSteel(
-            f_yk=400.0,
-            f_yk_t=400.0,
-            f_yk_c=400.0,
-            e_uk=0.10,
-            f_uk=400.0,
+        concrete=ConcreteType1(fck=40.0, gamma_c=1.50),
+        mild_steel=MildSteelType1(
+            fytk=400.0,
+            fyck=400.0,
+            futk=400.0,
+            eut=0.10,
             include_hardening=True,
-            gamma_s=1.15,
+            gamma_y=1.15,
             gamma_u=1.15,
             gamma_E=1.0,
         ),
