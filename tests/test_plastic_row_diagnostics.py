@@ -387,10 +387,9 @@ def test_unified_output_rule_study_reports_global_winners_and_resolution_status(
     assert (~winners["single_global_winner_exists"]).any()
 
 
-def test_unified_study_locks_global_lever_dy_winner_to_reported_dy():
+def test_unified_study_reports_lever_dy_candidate_ranking_without_forcing_production_adoption():
     _, _, winners = run_unified_output_rule_study()
     row = winners[winners["output"] == "lever_DY"].iloc[0]
-    assert bool(row["single_global_winner_exists"])
     assert row["best_candidate"] == "lever:reported:DY"
 
 
@@ -413,3 +412,5 @@ def test_methodology_alignment_audit_covers_required_categories_and_mismatch_sec
 
     rem = detail[detail["category"] == "Z_remaining_structural_mismatch"]
     assert {"tbeam_strain_gap", "lever_DX_ambiguity", "project_blocker_type"}.issubset(set(rem["item"]))
+
+

@@ -30,7 +30,7 @@ Family-specific candidate scoring for unresolved outputs.
 | snit | lever_DX | lever:centroid_concrete_to_tension:dx_negated | 5 | 0.00012289965549316725 | 0.00010647197493345748 | -1.0647197493345748e-16 | nan |
 | snit | lever_DX | lever:moment_over_compress_local:DX_from_My_local | 5 | 0.00021672028926989786 | 0.00015172626103656764 | 1.5172626103656763e-16 | nan |
 | snit | lever_DX | lever:moment_over_compress_global:DX_from_My | 5 | 0.00021672028926989786 | 0.0001984501465906359 | 1.12615620240343e-16 | nan |
-| annular | lever_DY | lever:reported:DY | 18 | 0.002499064091371146 | 0.0006937012685839397 | 1.8023071861446066e-17 | 1.0 |
+| annular | lever_DY | lever:reported:DY | 18 | 0.011396249607111993 | 0.0006937012685839397 | 7.730259295458484e-18 | 1.0 |
 | annular | lever_DY | lever:moment_over_compress_global:DY_from_Mx | 18 | 0.01673549740630647 | 0.005444119768875782 | 1.0535355752835208e-17 | 1.0 |
 | annular | lever_DY | lever:moment_over_compress_local:DY_from_Mx_local | 18 | 453284190099.6776 | 2.3967819276926736 | -0.39810202179127663 | 0.5 |
 | annular | lever_DY | lever:centroid_concrete_to_tension:dy | 18 | 454699788555.02246 | 2.390235017974833 | -0.3982949468064997 | 0.5 |
@@ -45,7 +45,7 @@ Family-specific candidate scoring for unresolved outputs.
 | snit | lever_DY | lever:centroid_concrete_to_tension:dy | 5 | 1.9913510154894285 | 1.2137769272620949 | -1.255045342789006 | 0.2 |
 | snit | lever_DY | lever:centroid_total:dy | 5 | 2.0017169424613783 | 1.2203833547773744 | -1.2618763888398052 | 0.2 |
 | annular | lever_L | lever:centroid_total:L | 18 | 0.001898238768191539 | 0.0004501441346765711 | -5.206119267808784e-05 | 1.0 |
-| annular | lever_L | lever:reported:L | 18 | 0.006735488627129012 | 0.0007691751888325511 | -5.206119267808784e-05 | 1.0 |
+| annular | lever_L | lever:reported:L | 18 | 0.001898238768191539 | 0.000450144134676631 | -5.206119267808784e-05 | 1.0 |
 | annular | lever_L | lever:moment_over_compress_local:L | 18 | 0.016737114751241625 | 0.014386943808808488 | -0.00595522488367109 | 1.0 |
 | annular | lever_L | lever:centroid_concrete_to_tension:L | 18 | 0.01947092864489448 | 0.015713414523600942 | -0.006300211444977638 | 1.0 |
 | snit | lever_L | lever:reported:L | 5 | 0.2548588073980012 | 0.07010418054351127 | 0.0012104444352719623 | 1.0 |
@@ -83,7 +83,7 @@ Family-specific candidate scoring for unresolved outputs.
 | compress_force | snit | compress_force:concrete_only | 1.791092062477927 | 1.4360408280622607 | 1.0 |  | False |
 | lever_DX | annular | lever:centroid_concrete_to_tension:dx | 1.0040155733174383 | 1.0 | 0.5714285714285714 |  | False |
 | lever_DX | snit | lever:reported:DX | 0.00010748498804273532 | 8.872660627433818e-05 | nan |  | False |
-| lever_DY | annular | lever:reported:DY | 0.002499064091371146 | 0.0006937012685839397 | 1.0 |  | False |
+| lever_DY | annular | lever:reported:DY | 0.011396249607111993 | 0.0006937012685839397 | 1.0 |  | False |
 | lever_DY | snit | lever:reported:DY | 0.2548588073980012 | 0.07010418054351127 | 1.0 |  | False |
 | lever_L | annular | lever:centroid_total:L | 0.001898238768191539 | 0.0004501441346765711 | 1.0 |  | False |
 | lever_L | snit | lever:reported:L | 0.2548588073980012 | 0.07010418054351127 | 1.0 |  | False |

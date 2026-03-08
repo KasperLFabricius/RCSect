@@ -236,12 +236,10 @@ class PlasticSolver:
         dx_arm_rot = c_tens['x'] - c_comp['x'] if (c_tens['x'] is not None and c_comp['x'] is not None) else 0.0
         dy_arm_rot = c_tens['y'] - c_comp['y'] if (c_tens['y'] is not None and c_comp['y'] is not None) else 0.0
 
-        # Benchmark-facing PCROSS mapping:
-        # - keep existing unified DX reconstruction unchanged
-        # - apply the unified-study-supported global DY convention (reported DY sign inversion)
+        # Unified non-family-specific reported lever mapping.
+        # NOTE: Global-DY-flip candidate remains diagnostic-only because it regressed annular benchmark fit.
         dx_global = dx_arm_rot * cos_a - (-dy_arm_rot) * sin_a
-        dy_global_base = dx_arm_rot * sin_a + dy_arm_rot * cos_a
-        dy_global = -dy_global_base
+        dy_global = dx_arm_rot * sin_a + (-dy_arm_rot) * cos_a
 
         return {
             "lever_DX": dx_global,

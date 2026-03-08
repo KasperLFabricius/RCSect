@@ -327,15 +327,16 @@ def test_annular_dxdy_sign_symmetry_pairs_follow_reference_pattern():
                 assert np.sign(float(ra["lever_DY"])) == -np.sign(float(rb["lever_DY"]))
 
 
-def test_reported_lever_dy_uses_global_sign_inversion_of_centroid_vector_cross_family():
-    # Cross-family guardrail for the adopted global DY convention only.
-    for key, angle in [("tbeam_lc3", 5.0), ("snit_a", 90.0), ("section0", 45.0)]:
+def test_annular_lever_arm_benchmark_fit_stays_within_pre_regression_bounds():
+    for key in ["section0", "sectioniv"]:
         case = EMBEDDED_BENCHMARK_CASES[key]
-        row = case.solver_builder().solve(angle_v_deg=angle, P_target=case.load.P_target)
-        c = row["debug_resultant_centroids"]
-        dx_local = c["tension_zone_centroid_x"] - c["compress_zone_centroid_x"]
-        dy_local = c["tension_zone_centroid_y"] - c["compress_zone_centroid_y"]
-
-        phi = np.radians(case.solver_builder().cs.local_rotation_deg(angle))
-        dy_global_base = dx_local * np.sin(phi) + dy_local * np.cos(phi)
-        assert np.isclose(row["lever_DY"], -dy_global_base, rtol=0.0, atol=1e-9)
+        df = run_benchmark_sweeps(
+            case.solver_builder(),
+            [BenchmarkSweepSpec(case.load_case, case.load.P_target, case.load.angles_deg)],
+            reference_rows=case.reference_rows,
+        )
+        refs = df[df["Mx_ref"].notna()]
+        assert not refs.empty
+        # Guardrail from PR#39 final rollback: avoid large annular lever regression.
+        assert float(refs["rel_err_DY"].max()) < 0.02
+        assert float(refs["rel_err_L"].max()) < 0.02
