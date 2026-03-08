@@ -1,0 +1,73 @@
+# Plastic Methodology Alignment Audit (PCROSS vs RCSect)
+
+Code-driven audit of solver assumptions and reported-output semantics against embedded PCROSS legacy facts.
+
+## Detailed checks
+
+| category | item | pcross_expectation | rcsect_observation | status | evidence |
+| --- | --- | --- | --- | --- | --- |
+| A_sign_conventions | axial_load_sign | Compression-positive P input/output | P_target and N_calc are compression-positive; internal N_tot is tension-positive and converted before report | aligned | PlasticSolver.solve docstring and _to_compression_positive usage |
+| A_sign_conventions | concrete_strain_sign | Printed strain positive in compression | Internal/report concrete strain is compression-positive (kappa*(y_top-y_na)) | aligned | strain_concrete uses internal_concrete_strain directly |
+| A_sign_conventions | mild_strain_sign | Printed strain positive in compression | Internal mild strain follows constitutive sign; reported mild strain uses legacy inversion (-internal) | partially_aligned | _reported_strain_outputs inverts internal mild strain |
+| A_sign_conventions | prestress_strain_sign | Printed cable strain positive in compression | Internal prestress total/incremental tracked with constitutive sign; reported prestress strain uses legacy inversion | partially_aligned | _reported_strain_outputs and debug prestress strain channels |
+| A_sign_conventions | moment_signs | Mx/My signs match benchmark printed orientation | Local->global transform includes benchmark-facing Mx sign anchoring and global rotation | aligned | _assemble_solution Mx/My transform logic |
+| A_sign_conventions | lever_signs | Printed DX/DY follow PCROSS reported convention | Centroid-based arm vector reported; DY uses unified global sign inversion winner, DX kept on existing unified reconstruction | partially_aligned | _reported_lever_outputs + unified study winner for DY |
+| B_angle_orientation | V_definition | V is NA angle to Y-axis | Solver takes angle_v_deg and rotates section via get_rotated_system/local_rotation_deg, then solves NA depth | partially_aligned | Direct NA-to-Y axis statement not explicitly encoded as contract |
+| B_angle_orientation | rotation_direction | Consistent section/NA orientation conventions | Rotation handled through CrossSection local_rotation_deg + trig transforms for moments/levers | partially_aligned | Consistent implementation, but legacy orientation contract remains inferred from benchmarks |
+| B_angle_orientation | MxMy_local_to_global | Printed Mx/My mapped from solved local frame | Explicit trig transform with benchmark-facing sign anchoring | aligned | _assemble_solution Mx_global/My_global equations |
+| B_angle_orientation | DXDY_local_to_global | Printed DX/DY mapped from centroid arm | Arm built in rotated frame then mapped to global; DY convention overridden per global winner | partially_aligned | _reported_lever_outputs |
+| B_angle_orientation | NA_intersections | Report NA intersections with X and Y axes | na_intersect_x and na_intersect_y are explicitly reported from y_na and trig | aligned | _assemble_solution intersection_x/intersection_y |
+| C_safety_factors | gamma_c_FC | Concrete design strength reduced by FC | ConcreteType1 uses gamma_c from benchmark mappings | aligned | build_pcross_tbeam_solver maps gamma_c to ConcreteType1 |
+| C_safety_factors | gamma_y_FY | Steel design strength reduced by FY | Mild/prestress type1 and type6 builders pass gamma_y | aligned | fixture builders pass gamma_y to steel models |
+| C_safety_factors | gamma_u_FU | Rupture stress/strain reduced by FU | Type1/type6 builders pass gamma_u and diagnostics include FU-mapping studies | partially_aligned | FU influence validated in benchmark fixture studies, not fully proven across all families |
+| C_safety_factors | gamma_E_FE | Steel modulus adjusted by FE | Type1/type6 builders pass gamma_E and benchmark mappings include FE variants | aligned | build_pcross_tbeam_solver and strip builders map gamma_E |
+| D_material_families | concrete_type1 | Explicit legacy type family | ConcreteType1 used in benchmark fixtures | aligned | build_pcross_tbeam_solver/build_strip/build_annular use ConcreteType1 |
+| D_material_families | mild_steel_type1 | Explicit legacy type family | MildSteelType1 used for benchmark families | aligned | Fixture builders instantiate MildSteelType1 |
+| D_material_families | prestressed_type1 | Explicit legacy type family | PrestressedSteelType1 used in tbeam benchmark path | aligned | build_pcross_tbeam_solver |
+| D_material_families | prestressed_type6 | Explicit legacy type family | PrestressedSteelType6 used in snit benchmark path | aligned | _build_strip_solver |
+| E_reported_outputs | strain_concrete | Reported max concrete strain compression-positive | Directly reported from solved kappa/y_na as compression-positive | directly_aligned | strain_concrete field |
+| E_reported_outputs | strain_mild | Reported max mild strain compression-positive | No robust global winner across families in unified study | unresolved | unified_winners strain_mild |
+| E_reported_outputs | strain_prestressed | Reported max cable strain compression-positive | No robust global winner across families in unified study | unresolved | unified_winners strain_prestressed |
+| E_reported_outputs | compress_force | Compression-zone sum concrete+mild+prestress | Reported as zone_compression_concrete+mild+prestress | directly_aligned | _reported_compression_and_warning_outputs |
+| E_reported_outputs | L | Lever-arm magnitude | Reported as hypot(DX,DY) | approximately_aligned | lever_L from reported DX/DY |
+| E_reported_outputs | DX | Reported lever component DX | No robust global winner in unified study | unresolved | unified_winners lever_DX |
+| E_reported_outputs | DY | Reported lever component DY | Global winner exists and production mapping follows reported DY sign inversion | directly_aligned | unified_winners lever_DY + _reported_lever_outputs |
+| E_reported_outputs | W1_W2 | Warnings based on compression reinforcement vs full concrete-compression design force | Reported thresholds are 0.5*N_c_util and 1.0*N_c_util | directly_aligned | _reported_compression_and_warning_outputs |
+| E_reported_outputs | U_R | U and R printed legacy outputs | U/R are not explicitly reported by production solver outputs | unresolved | _assemble_solution output keys exclude U and R |
+| E_reported_outputs | NA_intersections | NA intersections printed | na_intersect_x and na_intersect_y are reported | directly_aligned | _assemble_solution |
+| F_geometry_input | coords_in_m | Coordinates in meters | Fixtures and solver geometry values are in meter-scale coordinates | aligned | fixture coordinate magnitudes + force conversion conventions |
+| F_geometry_input | bar_area_mm2 | Bar areas in mm² | Bar areas consumed as mm² and converted through MPa*mm² -> N -> kN | aligned | _bar_force_kN and fixture bar areas |
+| F_geometry_input | outer_clockwise | Outer boundary clockwise | No universal runtime enforcement in solver core; fixtures are authored to required orientation | partially_aligned | fixture conventions relied upon |
+| F_geometry_input | void_anticlockwise | Void boundaries anti-clockwise | No universal runtime enforcement in solver core; fixtures authored accordingly | partially_aligned | fixture conventions relied upon |
+| F_geometry_input | mild_before_prestress | Mild bars listed before prestressed bars | CrossSection API takes separate mild/prestress lists; ordering is structurally separated | aligned | CrossSection inputs split as rebar_mild/rebar_prestressed |
+| Z_remaining_structural_mismatch | tbeam_strain_gap | T-beam reported strains should align under one global rule if output-only issue | Current studies show no robust global winner for strain_mild/strain_prestressed | likely_constitutive_or_family_methodology | plastic_tbeam_reported_strain_summary + unified_output_rule_summary |
+| Z_remaining_structural_mismatch | lever_DX_ambiguity | DX should admit robust global convention if purely output semantic | Unified study does not identify robust global DX winner | still_unresolved | plastic_unified_output_rule_summary |
+| Z_remaining_structural_mismatch | project_blocker_type | Output-definition tuning should close residuals if semantics-only | After DY adoption, remaining major residuals are mostly non-output-global (constitutive/family-methodology + missing U/R) | methodology_dominant | unified winners + reported output coverage |
+
+## Status summary
+
+| category | status | count |
+| --- | --- | --- |
+| A_sign_conventions | aligned | 3 |
+| A_sign_conventions | partially_aligned | 3 |
+| B_angle_orientation | aligned | 2 |
+| B_angle_orientation | partially_aligned | 3 |
+| C_safety_factors | aligned | 3 |
+| C_safety_factors | partially_aligned | 1 |
+| D_material_families | aligned | 4 |
+| E_reported_outputs | approximately_aligned | 1 |
+| E_reported_outputs | directly_aligned | 5 |
+| E_reported_outputs | unresolved | 4 |
+| F_geometry_input | aligned | 3 |
+| F_geometry_input | partially_aligned | 2 |
+| Z_remaining_structural_mismatch | likely_constitutive_or_family_methodology | 1 |
+| Z_remaining_structural_mismatch | methodology_dominant | 1 |
+| Z_remaining_structural_mismatch | still_unresolved | 1 |
+
+## Remaining structural mismatches likely driving benchmark residuals
+
+| category | item | pcross_expectation | rcsect_observation | status | evidence |
+| --- | --- | --- | --- | --- | --- |
+| Z_remaining_structural_mismatch | tbeam_strain_gap | T-beam reported strains should align under one global rule if output-only issue | Current studies show no robust global winner for strain_mild/strain_prestressed | likely_constitutive_or_family_methodology | plastic_tbeam_reported_strain_summary + unified_output_rule_summary |
+| Z_remaining_structural_mismatch | lever_DX_ambiguity | DX should admit robust global convention if purely output semantic | Unified study does not identify robust global DX winner | still_unresolved | plastic_unified_output_rule_summary |
+| Z_remaining_structural_mismatch | project_blocker_type | Output-definition tuning should close residuals if semantics-only | After DY adoption, remaining major residuals are mostly non-output-global (constitutive/family-methodology + missing U/R) | methodology_dominant | unified winners + reported output coverage |

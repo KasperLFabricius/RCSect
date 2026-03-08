@@ -20,6 +20,7 @@ from tests.plastic_diagnostics import (
     run_tbeam_reported_strain_study,
     run_annular_dxdy_definition_study,
     run_unified_output_rule_study,
+    run_methodology_alignment_audit,
 )
 
 
@@ -384,3 +385,31 @@ def test_unified_output_rule_study_reports_global_winners_and_resolution_status(
     assert set(winners["output"]) == {"lever_DX", "lever_DY", "strain_mild", "strain_prestressed"}
     # Current benchmark corpus still shows unresolved global ambiguity for at least one output.
     assert (~winners["single_global_winner_exists"]).any()
+
+
+def test_unified_study_locks_global_lever_dy_winner_to_reported_dy():
+    _, _, winners = run_unified_output_rule_study()
+    row = winners[winners["output"] == "lever_DY"].iloc[0]
+    assert bool(row["single_global_winner_exists"])
+    assert row["best_candidate"] == "lever:reported:DY"
+
+
+def test_methodology_alignment_audit_covers_required_categories_and_mismatch_section():
+    detail, status = run_methodology_alignment_audit()
+    assert not detail.empty
+    assert not status.empty
+
+    required_categories = {
+        "A_sign_conventions",
+        "B_angle_orientation",
+        "C_safety_factors",
+        "D_material_families",
+        "E_reported_outputs",
+        "F_geometry_input",
+        "Z_remaining_structural_mismatch",
+    }
+    assert required_categories.issubset(set(detail["category"]))
+    assert {"status", "evidence", "pcross_expectation", "rcsect_observation"}.issubset(detail.columns)
+
+    rem = detail[detail["category"] == "Z_remaining_structural_mismatch"]
+    assert {"tbeam_strain_gap", "lever_DX_ambiguity", "project_blocker_type"}.issubset(set(rem["item"]))

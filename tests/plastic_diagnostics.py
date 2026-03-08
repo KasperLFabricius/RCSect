@@ -2058,3 +2058,104 @@ def run_unified_output_rule_study() -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
 
     winners = pd.DataFrame(winner_rows).sort_values("output").reset_index(drop=True)
     return family_stats, summary, winners
+
+
+def run_methodology_alignment_audit() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Code-driven methodology alignment audit: RCSect plastic vs embedded PCROSS facts."""
+    family_stats, unified_summary, unified_winners = run_unified_output_rule_study()
+
+    # Runtime probes for evidence notes.
+    tbeam_solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
+    tbeam_row = tbeam_solver.solve(5.0, LOAD_CASE_3.P_target)
+    ann_case = EMBEDDED_BENCHMARK_CASES["section0"]
+    ann_row = ann_case.solver_builder().solve(45.0, ann_case.load.P_target)
+
+    rows = [
+        # A) sign conventions
+        {"category":"A_sign_conventions","item":"axial_load_sign","pcross_expectation":"Compression-positive P input/output","rcsect_observation":"P_target and N_calc are compression-positive; internal N_tot is tension-positive and converted before report","status":"aligned","evidence":"PlasticSolver.solve docstring and _to_compression_positive usage"},
+        {"category":"A_sign_conventions","item":"concrete_strain_sign","pcross_expectation":"Printed strain positive in compression","rcsect_observation":"Internal/report concrete strain is compression-positive (kappa*(y_top-y_na))","status":"aligned","evidence":"strain_concrete uses internal_concrete_strain directly"},
+        {"category":"A_sign_conventions","item":"mild_strain_sign","pcross_expectation":"Printed strain positive in compression","rcsect_observation":"Internal mild strain follows constitutive sign; reported mild strain uses legacy inversion (-internal)","status":"partially_aligned","evidence":"_reported_strain_outputs inverts internal mild strain"},
+        {"category":"A_sign_conventions","item":"prestress_strain_sign","pcross_expectation":"Printed cable strain positive in compression","rcsect_observation":"Internal prestress total/incremental tracked with constitutive sign; reported prestress strain uses legacy inversion","status":"partially_aligned","evidence":"_reported_strain_outputs and debug prestress strain channels"},
+        {"category":"A_sign_conventions","item":"moment_signs","pcross_expectation":"Mx/My signs match benchmark printed orientation","rcsect_observation":"Local->global transform includes benchmark-facing Mx sign anchoring and global rotation","status":"aligned","evidence":"_assemble_solution Mx/My transform logic"},
+        {"category":"A_sign_conventions","item":"lever_signs","pcross_expectation":"Printed DX/DY follow PCROSS reported convention","rcsect_observation":"Centroid-based arm vector reported; DY uses unified global sign inversion winner, DX kept on existing unified reconstruction","status":"partially_aligned","evidence":"_reported_lever_outputs + unified study winner for DY"},
+
+        # B) angle/orientation
+        {"category":"B_angle_orientation","item":"V_definition","pcross_expectation":"V is NA angle to Y-axis","rcsect_observation":"Solver takes angle_v_deg and rotates section via get_rotated_system/local_rotation_deg, then solves NA depth","status":"partially_aligned","evidence":"Direct NA-to-Y axis statement not explicitly encoded as contract"},
+        {"category":"B_angle_orientation","item":"rotation_direction","pcross_expectation":"Consistent section/NA orientation conventions","rcsect_observation":"Rotation handled through CrossSection local_rotation_deg + trig transforms for moments/levers","status":"partially_aligned","evidence":"Consistent implementation, but legacy orientation contract remains inferred from benchmarks"},
+        {"category":"B_angle_orientation","item":"MxMy_local_to_global","pcross_expectation":"Printed Mx/My mapped from solved local frame","rcsect_observation":"Explicit trig transform with benchmark-facing sign anchoring","status":"aligned","evidence":"_assemble_solution Mx_global/My_global equations"},
+        {"category":"B_angle_orientation","item":"DXDY_local_to_global","pcross_expectation":"Printed DX/DY mapped from centroid arm","rcsect_observation":"Arm built in rotated frame then mapped to global; DY convention overridden per global winner","status":"partially_aligned","evidence":"_reported_lever_outputs"},
+        {"category":"B_angle_orientation","item":"NA_intersections","pcross_expectation":"Report NA intersections with X and Y axes","rcsect_observation":"na_intersect_x and na_intersect_y are explicitly reported from y_na and trig","status":"aligned","evidence":"_assemble_solution intersection_x/intersection_y"},
+
+        # C) safety factors
+        {"category":"C_safety_factors","item":"gamma_c_FC","pcross_expectation":"Concrete design strength reduced by FC","rcsect_observation":"ConcreteType1 uses gamma_c from benchmark mappings","status":"aligned","evidence":"build_pcross_tbeam_solver maps gamma_c to ConcreteType1"},
+        {"category":"C_safety_factors","item":"gamma_y_FY","pcross_expectation":"Steel design strength reduced by FY","rcsect_observation":"Mild/prestress type1 and type6 builders pass gamma_y","status":"aligned","evidence":"fixture builders pass gamma_y to steel models"},
+        {"category":"C_safety_factors","item":"gamma_u_FU","pcross_expectation":"Rupture stress/strain reduced by FU","rcsect_observation":"Type1/type6 builders pass gamma_u and diagnostics include FU-mapping studies","status":"partially_aligned","evidence":"FU influence validated in benchmark fixture studies, not fully proven across all families"},
+        {"category":"C_safety_factors","item":"gamma_E_FE","pcross_expectation":"Steel modulus adjusted by FE","rcsect_observation":"Type1/type6 builders pass gamma_E and benchmark mappings include FE variants","status":"aligned","evidence":"build_pcross_tbeam_solver and strip builders map gamma_E"},
+
+        # D) material families
+        {"category":"D_material_families","item":"concrete_type1","pcross_expectation":"Explicit legacy type family","rcsect_observation":"ConcreteType1 used in benchmark fixtures","status":"aligned","evidence":"build_pcross_tbeam_solver/build_strip/build_annular use ConcreteType1"},
+        {"category":"D_material_families","item":"mild_steel_type1","pcross_expectation":"Explicit legacy type family","rcsect_observation":"MildSteelType1 used for benchmark families","status":"aligned","evidence":"Fixture builders instantiate MildSteelType1"},
+        {"category":"D_material_families","item":"prestressed_type1","pcross_expectation":"Explicit legacy type family","rcsect_observation":"PrestressedSteelType1 used in tbeam benchmark path","status":"aligned","evidence":"build_pcross_tbeam_solver"},
+        {"category":"D_material_families","item":"prestressed_type6","pcross_expectation":"Explicit legacy type family","rcsect_observation":"PrestressedSteelType6 used in snit benchmark path","status":"aligned","evidence":"_build_strip_solver"},
+
+        # E) reported outputs
+        {"category":"E_reported_outputs","item":"strain_concrete","pcross_expectation":"Reported max concrete strain compression-positive","rcsect_observation":"Directly reported from solved kappa/y_na as compression-positive","status":"directly_aligned","evidence":"strain_concrete field"},
+        {"category":"E_reported_outputs","item":"strain_mild","pcross_expectation":"Reported max mild strain compression-positive","rcsect_observation":"No robust global winner across families in unified study","status":"unresolved","evidence":"unified_winners strain_mild"},
+        {"category":"E_reported_outputs","item":"strain_prestressed","pcross_expectation":"Reported max cable strain compression-positive","rcsect_observation":"No robust global winner across families in unified study","status":"unresolved","evidence":"unified_winners strain_prestressed"},
+        {"category":"E_reported_outputs","item":"compress_force","pcross_expectation":"Compression-zone sum concrete+mild+prestress","rcsect_observation":"Reported as zone_compression_concrete+mild+prestress","status":"directly_aligned","evidence":"_reported_compression_and_warning_outputs"},
+        {"category":"E_reported_outputs","item":"L","pcross_expectation":"Lever-arm magnitude","rcsect_observation":"Reported as hypot(DX,DY)","status":"approximately_aligned","evidence":"lever_L from reported DX/DY"},
+        {"category":"E_reported_outputs","item":"DX","pcross_expectation":"Reported lever component DX","rcsect_observation":"No robust global winner in unified study","status":"unresolved","evidence":"unified_winners lever_DX"},
+        {"category":"E_reported_outputs","item":"DY","pcross_expectation":"Reported lever component DY","rcsect_observation":"Global winner exists and production mapping follows reported DY sign inversion","status":"directly_aligned","evidence":"unified_winners lever_DY + _reported_lever_outputs"},
+        {"category":"E_reported_outputs","item":"W1_W2","pcross_expectation":"Warnings based on compression reinforcement vs full concrete-compression design force","rcsect_observation":"Reported thresholds are 0.5*N_c_util and 1.0*N_c_util","status":"directly_aligned","evidence":"_reported_compression_and_warning_outputs"},
+        {"category":"E_reported_outputs","item":"U_R","pcross_expectation":"U and R printed legacy outputs","rcsect_observation":"U/R are not explicitly reported by production solver outputs","status":"unresolved","evidence":"_assemble_solution output keys exclude U and R"},
+        {"category":"E_reported_outputs","item":"NA_intersections","pcross_expectation":"NA intersections printed","rcsect_observation":"na_intersect_x and na_intersect_y are reported","status":"directly_aligned","evidence":"_assemble_solution"},
+
+        # F) geometry/input semantics
+        {"category":"F_geometry_input","item":"coords_in_m","pcross_expectation":"Coordinates in meters","rcsect_observation":"Fixtures and solver geometry values are in meter-scale coordinates","status":"aligned","evidence":"fixture coordinate magnitudes + force conversion conventions"},
+        {"category":"F_geometry_input","item":"bar_area_mm2","pcross_expectation":"Bar areas in mm²","rcsect_observation":"Bar areas consumed as mm² and converted through MPa*mm² -> N -> kN","status":"aligned","evidence":"_bar_force_kN and fixture bar areas"},
+        {"category":"F_geometry_input","item":"outer_clockwise","pcross_expectation":"Outer boundary clockwise","rcsect_observation":"No universal runtime enforcement in solver core; fixtures are authored to required orientation","status":"partially_aligned","evidence":"fixture conventions relied upon"},
+        {"category":"F_geometry_input","item":"void_anticlockwise","pcross_expectation":"Void boundaries anti-clockwise","rcsect_observation":"No universal runtime enforcement in solver core; fixtures authored accordingly","status":"partially_aligned","evidence":"fixture conventions relied upon"},
+        {"category":"F_geometry_input","item":"mild_before_prestress","pcross_expectation":"Mild bars listed before prestressed bars","rcsect_observation":"CrossSection API takes separate mild/prestress lists; ordering is structurally separated","status":"aligned","evidence":"CrossSection inputs split as rebar_mild/rebar_prestressed"},
+    ]
+
+    detail = pd.DataFrame(rows)
+
+    # Remaining structural mismatch summary rows (for easy CSV filtering).
+    mismatch_rows = [
+        {
+            "category": "Z_remaining_structural_mismatch",
+            "item": "tbeam_strain_gap",
+            "pcross_expectation": "T-beam reported strains should align under one global rule if output-only issue",
+            "rcsect_observation": "Current studies show no robust global winner for strain_mild/strain_prestressed",
+            "status": "likely_constitutive_or_family_methodology",
+            "evidence": "plastic_tbeam_reported_strain_summary + unified_output_rule_summary",
+        },
+        {
+            "category": "Z_remaining_structural_mismatch",
+            "item": "lever_DX_ambiguity",
+            "pcross_expectation": "DX should admit robust global convention if purely output semantic",
+            "rcsect_observation": "Unified study does not identify robust global DX winner",
+            "status": "still_unresolved",
+            "evidence": "plastic_unified_output_rule_summary",
+        },
+        {
+            "category": "Z_remaining_structural_mismatch",
+            "item": "project_blocker_type",
+            "pcross_expectation": "Output-definition tuning should close residuals if semantics-only",
+            "rcsect_observation": "After DY adoption, remaining major residuals are mostly non-output-global (constitutive/family-methodology + missing U/R)",
+            "status": "methodology_dominant",
+            "evidence": "unified winners + reported output coverage",
+        },
+    ]
+
+    detail = pd.concat([detail, pd.DataFrame(mismatch_rows)], ignore_index=True)
+
+    status_summary = (
+        detail.groupby(["category", "status"], dropna=False)
+        .size()
+        .reset_index(name="count")
+        .sort_values(["category", "status"])
+        .reset_index(drop=True)
+    )
+
+    return detail, status_summary

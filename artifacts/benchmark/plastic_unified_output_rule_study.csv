@@ -25,7 +25,7 @@ lever_DY,lever:moment_over_compress_global:DY_from_Mx,annular,18,0.0167354974063
 lever_DY,lever:moment_over_compress_global:DY_from_Mx,snit,5,0.5264131359907772,0.23261532421263356,1.0
 lever_DY,lever:moment_over_compress_local:DY_from_Mx_local,annular,18,453284190099.6776,2.3967819276926736,0.5
 lever_DY,lever:moment_over_compress_local:DY_from_Mx_local,snit,5,1.7922422727288532,1.5641323185082772,0.2
-lever_DY,lever:reported:DY,annular,18,0.011396249607111993,0.0006937012685839397,1.0
+lever_DY,lever:reported:DY,annular,18,0.002499064091371146,0.0006937012685839397,1.0
 lever_DY,lever:reported:DY,snit,5,0.2548588073980012,0.07010418054351127,1.0
 strain_mild,strain_mild:abs_strain_governing_total,annular,18,2.0052583528373704,2.0035022568181367,0.0
 strain_mild,strain_mild:abs_strain_governing_total,snit,14,35136741679.59075,1.9824637548748036,0.16666666666666666

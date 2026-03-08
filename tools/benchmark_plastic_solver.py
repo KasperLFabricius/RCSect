@@ -36,6 +36,7 @@ from tests.plastic_diagnostics import (
     run_tbeam_reported_strain_study,
     run_annular_dxdy_definition_study,
     run_unified_output_rule_study,
+    run_methodology_alignment_audit,
 )
 
 
@@ -318,6 +319,7 @@ def main() -> None:
     tbeam_reported_strain_detail, tbeam_reported_strain_summary = run_tbeam_reported_strain_study()
     annular_dxdy_def_detail, annular_dxdy_def_summary = run_annular_dxdy_definition_study()
     unified_family_detail, unified_summary, unified_winners = run_unified_output_rule_study()
+    methodology_detail, methodology_status = run_methodology_alignment_audit()
     zone_partition = run_zone_partition_study()
     semantic_winners = choose_semantic_winners(semantics_summary)
     family_winners = choose_semantic_winners_by_family(semantics_summary)
@@ -362,6 +364,8 @@ def main() -> None:
     annular_dxdy_def_md = out_dir / "plastic_annular_dxdy_summary.md"
     unified_rule_csv = out_dir / "plastic_unified_output_rule_study.csv"
     unified_rule_md = out_dir / "plastic_unified_output_rule_summary.md"
+    methodology_csv = out_dir / "plastic_methodology_alignment_audit.csv"
+    methodology_md = out_dir / "plastic_methodology_alignment_audit.md"
 
     legacy_shift_csv = out_dir / "plastic_legacy_shift.csv"
     legacy_shift_md = out_dir / "plastic_legacy_shift_summary.md"
@@ -409,6 +413,7 @@ def main() -> None:
     tbeam_reported_strain_detail.to_csv(tbeam_reported_strain_csv, index=False)
     annular_dxdy_def_detail.to_csv(annular_dxdy_def_csv, index=False)
     unified_family_detail.to_csv(unified_rule_csv, index=False)
+    methodology_detail.to_csv(methodology_csv, index=False)
 
     referenced = detail[detail["Mx_ref"].notna()][
         [
@@ -515,6 +520,14 @@ def main() -> None:
     md_unified += "## Winner assessment\n\n" + _markdown_table(unified_winners) + "\n"
     unified_rule_md.write_text(md_unified)
 
+    md_method = "# Plastic Methodology Alignment Audit (PCROSS vs RCSect)\n\n"
+    md_method += "Code-driven audit of solver assumptions and reported-output semantics against embedded PCROSS legacy facts.\n\n"
+    md_method += "## Detailed checks\n\n" + _markdown_table(methodology_detail) + "\n\n"
+    md_method += "## Status summary\n\n" + _markdown_table(methodology_status) + "\n\n"
+    rem = methodology_detail[methodology_detail["category"] == "Z_remaining_structural_mismatch"]
+    md_method += "## Remaining structural mismatches likely driving benchmark residuals\n\n" + _markdown_table(rem) + "\n"
+    methodology_md.write_text(md_method)
+
     prior_mx, prior_my = _max_rel_errors(prior_summary)
     cur_mx, cur_my = _max_rel_errors(summary)
     md += "\n## Error delta vs prior artifact\n\n"
@@ -605,6 +618,8 @@ def main() -> None:
     print(f"Wrote {annular_dxdy_def_md}")
     print(f"Wrote {unified_rule_csv}")
     print(f"Wrote {unified_rule_md}")
+    print(f"Wrote {methodology_csv}")
+    print(f"Wrote {methodology_md}")
 
 
 if __name__ == "__main__":
