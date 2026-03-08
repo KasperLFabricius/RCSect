@@ -52,7 +52,7 @@ class ConcreteType1:
             )
             sigma[mask_cubic] = (self.alpha_cc * f_char) / self.gamma_c
 
-        mask_plateau = (e_pct >= 0.2) & (e_pct < 0.35)
+        mask_plateau = (e_pct >= 0.2) & (e_pct <= 0.35)
         sigma[mask_plateau] = (self.alpha_cc * self.fck) / self.gamma_c
 
         # e_pct < 0 (tension) and e_pct >= 0.35 (crushed) stay at zero.
@@ -95,7 +95,8 @@ class MildSteelType1:
         self.f_ud_t = self.futk / self.gamma_u
         self.eps_ud = self.eut
 
-        self.include_hardening = bool(include_hardening)
+        # include_hardening kept only for API compatibility;
+        # type-1 benchmark path always uses the figure-defined hardening branch.
 
         # Compatibility aliases
         self.gamma_s = self.gamma_y
@@ -179,21 +180,20 @@ class PrestressedSteelType1:
 
         sigma = np.zeros_like(eps_arr, dtype=float)
 
-        abs_e = np.abs(e_pct)
-        sign_e = np.sign(e_pct)
+        # Tension-side-only definition from embedded benchmark figure.
+        # For e_pct < 0 (compression), stress remains zero.
+        mask1 = (e_pct >= 0.0) & (e_pct < 0.6)
+        sigma[mask1] = (2000.0 * e_pct[mask1]) / self.gamma_y
 
-        mask1 = (abs_e >= 0.0) & (abs_e < 0.6)
-        sigma[mask1] = sign_e[mask1] * (2000.0 * abs_e[mask1]) / self.gamma_y
+        mask2 = (e_pct >= 0.6) & (e_pct < 1.0)
+        e = e_pct[mask2]
+        sigma[mask2] = (-2500.0 * e**2 + 5000.0 * e - 900.0) / self.gamma_y
 
-        mask2 = (abs_e >= 0.6) & (abs_e < 1.0)
-        e = abs_e[mask2]
-        sigma[mask2] = sign_e[mask2] * ((-2500.0 * e**2 + 5000.0 * e - 900.0) / self.gamma_y)
+        mask3 = (e_pct >= 1.0) & (e_pct < 1.75)
+        sigma[mask3] = (60.0 * e_pct[mask3] + 1540.0) / self.gamma_y
 
-        mask3 = (abs_e >= 1.0) & (abs_e < 1.75)
-        sigma[mask3] = sign_e[mask3] * ((60.0 * abs_e[mask3] + 1540.0) / self.gamma_y)
-
-        mask4 = (abs_e >= 1.75) & (abs_e <= self.RES_PCT)
-        sigma[mask4] = sign_e[mask4] * (1645.0 / self.gamma_y)
+        mask4 = (e_pct >= 1.75) & (e_pct <= self.RES_PCT)
+        sigma[mask4] = 1645.0 / self.gamma_y
 
         # Above RES we treat as rupture for benchmark path: zero stress.
         return sigma

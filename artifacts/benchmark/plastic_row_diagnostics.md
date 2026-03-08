@@ -15,7 +15,7 @@ Six embedded manual rows with signed and intermediate-quantity decomposition.
 
 | group | mean_rel |
 | --- | --- |
-| force/strain/curvature level | 0.5204424168534856 |
+| force/strain/curvature level | 0.6002852487531146 |
 | moment/transformation level | 0.3316757927935468 |
 
 Conclusion: largest mismatch appears already present in constitutive/equilibrium response

@@ -233,7 +233,7 @@ class PlasticSolver:
         if mild_governing is not None:
             max_mild_strain = mild_governing
         max_prestressed_strain = None
-        prest_governing = _max_by_abs(forces_data['prestressed_strains_total_permille'])
+        prest_governing = _max_by_abs(forces_data['prestressed_strains_incremental_permille'])
         if prest_governing is not None:
             max_prestressed_strain = prest_governing
 

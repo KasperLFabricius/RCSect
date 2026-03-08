@@ -9,7 +9,7 @@ snit,compression force,1.7945786894858,>5%
 snit,curvature,0.0047956443531201095,<1%
 snit,lever-arms,1.4047534180200494,>5%
 snit,moments,0.010566743050442712,1-5%
-snit,strains,2.0132519634680768,>5%
+snit,strains,1.9953310837333114,>5%
 snit,warnings,,N/A
 tbeam,compression force,,N/A
 tbeam,curvature,,N/A
