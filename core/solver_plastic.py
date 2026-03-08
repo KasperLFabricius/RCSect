@@ -258,8 +258,9 @@ class PlasticSolver:
         # Geometric internal-arm vector is tension-zone minus compression-zone centroid.
         dx_arm_rot = c_tens['x'] - c_comp['x'] if (c_tens['x'] is not None and c_comp['x'] is not None) else 0.0
         dy_arm_rot = c_tens['y'] - c_comp['y'] if (c_tens['y'] is not None and c_comp['y'] is not None) else 0.0
-        # Legacy PCROSS benchmark sign convention stores DX/DY with opposite sign.
-        DX_rot = -dx_arm_rot
+        # Annular benchmark sign discriminator shows asymmetric legacy reporting:
+        # DX follows comp->tension arm sign, DY is reported with a sign inversion.
+        DX_rot = dx_arm_rot
         DY_rot = -dy_arm_rot
 
         DX_global = DX_rot * cos_a - DY_rot * sin_a

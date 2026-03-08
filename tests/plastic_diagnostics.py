@@ -1121,19 +1121,21 @@ def _row_dxdy_sign_candidates(row: dict, local_rotation_deg: float) -> list[dict
         dxg_ct, dyg_ct = _rotate_to_global(dx_local_ct, dy_local_ct, local_rotation_deg)
         dxg_tc, dyg_tc = _rotate_to_global(dx_local_tc, dy_local_tc, local_rotation_deg)
 
-        # A/B/C/D required explicit variants.
+        # A/B/C/D + single-axis flips for explicit sign diagnostics.
         add("A_current_centroid_with_explicit_sign_flip", -dxg_ct, -dyg_ct)
         add("B_centroid_without_explicit_sign_flip", dxg_ct, dyg_ct)
-        add("C_comp_to_tens_local_then_global", dxg_ct, dyg_ct)
-        add("D_tens_to_comp_local_then_global", dxg_tc, dyg_tc)
+        add("C_flip_DX_only", -dxg_ct, dyg_ct)
+        add("D_flip_DY_only", dxg_ct, -dyg_ct)
+        add("E_comp_to_tens_local_then_global_no_override", dxg_ct, dyg_ct)
+        add("F_tens_to_comp_local_then_global", dxg_tc, dyg_tc)
 
-        # E/F direct-global build from centroid coordinates.
+        # Direct-global build from centroid coordinates.
         xcg, ycg = _rotate_to_global(xcf, ycf, local_rotation_deg)
         xtg, ytg = _rotate_to_global(xtf, ytf, local_rotation_deg)
         dxg_direct = xtg - xcg
         dyg_direct = ytg - ycg
-        add("E_comp_to_tens_direct_global_no_flip", dxg_direct, dyg_direct)
-        add("F_comp_to_tens_direct_global_with_flip", -dxg_direct, -dyg_direct)
+        add("E2_comp_to_tens_direct_global_no_flip", dxg_direct, dyg_direct)
+        add("F2_comp_to_tens_direct_global_with_flip", -dxg_direct, -dyg_direct)
 
     cf = float(row.get("compress_force", np.nan))
     if np.isfinite(cf) and abs(cf) > 1e-12:
@@ -1244,3 +1246,328 @@ def run_dxdy_sign_transformation_study() -> tuple[pd.DataFrame, pd.DataFrame, pd
                 )
     annular_pairs = pd.DataFrame(pair_rows).sort_values(["fixture", "output", "candidate", "pair"]).reset_index(drop=True)
     return detail, summary, winners, annular_pairs
+
+
+def run_annular_dxdy_sign_focus_study() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Focused annular-only DX/DY sign/transformation discriminator."""
+    rows = []
+    for key in ["section0", "sectioniv"]:
+        case = EMBEDDED_BENCHMARK_CASES[key]
+        solver = case.solver_builder()
+        solved = solver.solve_angle_sweep(case.load.angles_deg, case.load.P_target)
+        by_angle = {float(r["angle_v_deg"]): r for r in solved}
+        for angle in case.load.angles_deg:
+            a = float(angle)
+            row = by_angle[a]
+            ref = case.reference_rows.get((case.load_case, a), None)
+            if ref is None:
+                continue
+            ref_dx = float(ref.get("lever_DX", ref.get("DX", np.nan)))
+            ref_dy = float(ref.get("lever_DY", ref.get("DY", np.nan)))
+            if not (np.isfinite(ref_dx) and np.isfinite(ref_dy)):
+                continue
+
+            dz = row.get("debug_resultant_centroids", {})
+            xc = dz.get("compress_zone_centroid_x")
+            yc = dz.get("compress_zone_centroid_y")
+            xt = dz.get("tension_zone_centroid_x")
+            yt = dz.get("tension_zone_centroid_y")
+            if any(v is None or not np.isfinite(float(v)) for v in [xc, yc, xt, yt]):
+                continue
+
+            dx_local = float(xt) - float(xc)
+            dy_local = float(yt) - float(yc)
+            phi = float(solver.cs.local_rotation_deg(a))
+            dx_g, dy_g = _rotate_to_global(dx_local, dy_local, phi)
+            dx_g_tc, dy_g_tc = _rotate_to_global(-dx_local, -dy_local, phi)
+
+            candidates = {
+                "1_current_branch_flip_both": (-dx_g, -dy_g),
+                "2_no_blanket_flip": (dx_g, dy_g),
+                "3_flip_DX_only": (-dx_g, dy_g),
+                "4_flip_DY_only": (dx_g, -dy_g),
+                "5_local_to_global_no_override": (dx_g, dy_g),
+                "6_local_to_global_post_flip_DY": (dx_g, -dy_g),
+                "6b_local_to_global_tension_to_compression": (dx_g_tc, dy_g_tc),
+            }
+
+            qref = _quadrant(ref_dx, ref_dy)
+            for cand, (dx, dy) in candidates.items():
+                rows.append(
+                    {
+                        "fixture": key,
+                        "fixture_family": "annular",
+                        "load_case": int(case.load_case),
+                        "V_deg": a,
+                        "candidate": cand,
+                        "DX_ref": ref_dx,
+                        "DY_ref": ref_dy,
+                        "DX_calc": dx,
+                        "DY_calc": dy,
+                        "DX_rel_error": _safe_rel_err(dx, ref_dx),
+                        "DY_rel_error": _safe_rel_err(dy, ref_dy),
+                        "DX_sign_agreement": _sign_agreement(dx, ref_dx),
+                        "DY_sign_agreement": _sign_agreement(dy, ref_dy),
+                        "quadrant_ref": qref,
+                        "quadrant_calc": _quadrant(dx, dy),
+                        "quadrant_agreement": bool(_quadrant(dx, dy) == qref),
+                    }
+                )
+
+    detail = pd.DataFrame(rows).sort_values(["candidate", "fixture", "V_deg"]).reset_index(drop=True)
+    summary = (
+        detail.groupby("candidate", dropna=False)
+        .agg(
+            max_rel_error_DX=("DX_rel_error", "max"),
+            max_rel_error_DY=("DY_rel_error", "max"),
+            sign_agreement_rate_DX=("DX_sign_agreement", "mean"),
+            sign_agreement_rate_DY=("DY_sign_agreement", "mean"),
+            quadrant_consistency_rate=("quadrant_agreement", "mean"),
+        )
+        .reset_index()
+        .sort_values(["max_rel_error_DX", "max_rel_error_DY", "quadrant_consistency_rate"], ascending=[True, True, False])
+        .reset_index(drop=True)
+    )
+    return detail, summary
+
+
+def _tbeam_rows_for_constitutive_audit() -> tuple[list[dict], object]:
+    solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
+    rows = []
+    for lc, load in [(3, LOAD_CASE_3), (4, LOAD_CASE_4)]:
+        solved = solver.solve_angle_sweep(load.angles_deg, load.P_target)
+        by_angle = {float(r["angle_v_deg"]): r for r in solved}
+        for angle in load.angles_deg:
+            a = float(angle)
+            ref = MANUAL_ROW_DIAGNOSTICS.get((lc, a))
+            if ref is None:
+                continue
+            rows.append({"load_case": lc, "V_deg": a, "row": by_angle[a], "ref": ref})
+    return rows, solver
+
+
+def _mild_state_label(ms, eps: float, sigma: float) -> str:
+    if eps >= 0.0:
+        if abs(eps) <= ms.eps_yd_t + 1e-12:
+            return "tension_elastic"
+        if abs(sigma) >= ms.f_yd_t - 1e-6:
+            return "tension_post_yield"
+        return "tension_transition"
+    if abs(eps) <= ms.eps_yd_c + 1e-12:
+        return "compression_elastic"
+    return "compression_post_yield"
+
+
+def _prestress_state_label(total_eps: float, stress_mpa: float) -> str:
+    e_pct = 100.0 * float(total_eps)
+    if e_pct < 0.0:
+        return "compression_zero_branch"
+    if e_pct < 0.6:
+        return "segment_0_0p6"
+    if e_pct < 1.0:
+        return "segment_0p6_1p0"
+    if e_pct < 1.75:
+        return "segment_1p0_1p75"
+    if e_pct <= 3.5:
+        return "segment_1p75_3p5_plateau"
+    return "post_residual_zero"
+
+
+def run_tbeam_constitutive_audit() -> tuple[pd.DataFrame, pd.DataFrame]:
+    rows = []
+    tbeam_rows, base_solver = _tbeam_rows_for_constitutive_audit()
+    ms = base_solver.mild_steel
+    for rec in tbeam_rows:
+        lc = rec["load_case"]
+        a = rec["V_deg"]
+        row = rec["row"]
+        ref = rec["ref"]
+        dbg = row.get("debug_force_components") or {}
+
+        mild_ref_pm = _to_permille_ref(ref.get("strain_mild"))
+        pre_ref_pm = _to_permille_ref(ref.get("strain_prestressed"))
+
+        for b in dbg.get("mild_bar_details", []):
+            eps_t = float(b.get("strain_total", np.nan))
+            eps_legacy = -eps_t * 1000.0
+            eps_pm = eps_t * 1000.0
+            rows.append(
+                {
+                    "load_case": lc,
+                    "V_deg": a,
+                    "family": "tbeam",
+                    "bar_family": "mild",
+                    "bar_id": b.get("id"),
+                    "zone_classification": "compression" if eps_t < 0.0 else "tension",
+                    "strain_total_permille": eps_pm,
+                    "strain_incremental_permille": np.nan,
+                    "strain_total_legacy_permille": eps_legacy,
+                    "stress_mpa": float(b.get("stress_mpa", np.nan)),
+                    "force_kN": float(b.get("force_kN", np.nan)),
+                    "state_label": _mild_state_label(ms, eps_t, float(b.get("stress_mpa", np.nan))),
+                    "strain_mild_ref_permille": mild_ref_pm,
+                    "strain_prestressed_ref_permille": pre_ref_pm,
+                    "abs_gap_to_mild_ref_total": abs(eps_pm - mild_ref_pm) if np.isfinite(mild_ref_pm) else np.nan,
+                    "abs_gap_to_mild_ref_legacy": abs(eps_legacy - mild_ref_pm) if np.isfinite(mild_ref_pm) else np.nan,
+                    "abs_gap_to_prestress_ref_total": np.nan,
+                    "abs_gap_to_prestress_ref_legacy": np.nan,
+                    "abs_gap_to_prestress_ref_incremental": np.nan,
+                    "abs_gap_to_prestress_ref_incremental_legacy": np.nan,
+                }
+            )
+
+        for b in dbg.get("prestressed_bar_details", []):
+            eps_t = float(b.get("strain_total", np.nan))
+            eps_i = float(b.get("strain_incremental", np.nan))
+            eps_legacy = -eps_t * 1000.0
+            eps_i_legacy = -eps_i * 1000.0
+            rows.append(
+                {
+                    "load_case": lc,
+                    "V_deg": a,
+                    "family": "tbeam",
+                    "bar_family": "prestressed",
+                    "bar_id": b.get("id"),
+                    "zone_classification": "compression" if eps_i < 0.0 else "tension",
+                    "strain_total_permille": eps_t * 1000.0,
+                    "strain_incremental_permille": eps_i * 1000.0,
+                    "strain_total_legacy_permille": eps_legacy,
+                    "stress_mpa": float(b.get("stress_mpa", np.nan)),
+                    "force_kN": float(b.get("force_kN", np.nan)),
+                    "state_label": _prestress_state_label(eps_t, float(b.get("stress_mpa", np.nan))),
+                    "strain_mild_ref_permille": mild_ref_pm,
+                    "strain_prestressed_ref_permille": pre_ref_pm,
+                    "abs_gap_to_mild_ref_total": np.nan,
+                    "abs_gap_to_mild_ref_legacy": np.nan,
+                    "abs_gap_to_prestress_ref_total": abs((eps_t * 1000.0) - pre_ref_pm) if np.isfinite(pre_ref_pm) else np.nan,
+                    "abs_gap_to_prestress_ref_legacy": abs(eps_legacy - pre_ref_pm) if np.isfinite(pre_ref_pm) else np.nan,
+                    "abs_gap_to_prestress_ref_incremental": abs((eps_i * 1000.0) - pre_ref_pm) if np.isfinite(pre_ref_pm) else np.nan,
+                    "abs_gap_to_prestress_ref_incremental_legacy": abs(eps_i_legacy - pre_ref_pm) if np.isfinite(pre_ref_pm) else np.nan,
+                }
+            )
+
+    detail = pd.DataFrame(rows).sort_values(["load_case", "V_deg", "bar_family", "bar_id"]).reset_index(drop=True)
+
+    summary_rows = []
+    for (lc, a), grp in detail.groupby(["load_case", "V_deg"]):
+        mild = grp[grp["bar_family"] == "mild"]
+        pre = grp[grp["bar_family"] == "prestressed"]
+        summary_rows.append(
+            {
+                "load_case": int(lc),
+                "V_deg": float(a),
+                "strain_mild_ref_permille": float(grp["strain_mild_ref_permille"].dropna().iloc[0]) if grp["strain_mild_ref_permille"].notna().any() else np.nan,
+                "strain_prestressed_ref_permille": float(grp["strain_prestressed_ref_permille"].dropna().iloc[0]) if grp["strain_prestressed_ref_permille"].notna().any() else np.nan,
+                "best_mild_gap_total": float(mild["abs_gap_to_mild_ref_total"].min()) if not mild.empty else np.nan,
+                "best_mild_gap_legacy": float(mild["abs_gap_to_mild_ref_legacy"].min()) if not mild.empty else np.nan,
+                "best_prestress_gap_total": float(pre["abs_gap_to_prestress_ref_total"].min()) if not pre.empty else np.nan,
+                "best_prestress_gap_legacy": float(pre["abs_gap_to_prestress_ref_legacy"].min()) if not pre.empty else np.nan,
+                "best_prestress_gap_incremental": float(pre["abs_gap_to_prestress_ref_incremental"].min()) if not pre.empty else np.nan,
+                "best_prestress_gap_incremental_legacy": float(pre["abs_gap_to_prestress_ref_incremental_legacy"].min()) if not pre.empty else np.nan,
+            }
+        )
+    summary = pd.DataFrame(summary_rows).sort_values(["load_case", "V_deg"]).reset_index(drop=True)
+    return detail, summary
+
+
+def run_tbeam_constitutive_variant_study() -> pd.DataFrame:
+    """Narrow benchmark-only constitutive variants for T-beam strain diagnostics."""
+
+    variants = [
+        "baseline",
+        "mild_perfect_plastic",
+        "prestress_soft_post_yield",
+        "mild_perfect_plastic_plus_prestress_soft",
+    ]
+
+    rows = []
+    target_rows = list(DIAGNOSTIC_ROWS)
+
+    for var in variants:
+        solver = build_pcross_tbeam_solver(prestress_eps0=0.004)
+
+        if "mild_perfect_plastic" in var:
+            ms = solver.mild_steel
+
+            def mild_stress_variant(eps):
+                ea = np.asarray(eps, dtype=float)
+                s = np.zeros_like(ea)
+                mt = ea >= 0.0
+                if np.any(mt):
+                    et = ea[mt]
+                    s[mt] = np.where(et <= ms.eps_yd_t, ms.E_s * et, ms.f_yd_t)
+                mc = ea < 0.0
+                if np.any(mc):
+                    ec = np.abs(ea[mc])
+                    s[mc] = np.where(ec <= ms.eps_yd_c, -ms.E_s * ec, -ms.f_yd_c)
+                return s
+
+            ms.stress = mild_stress_variant
+
+        if "prestress_soft_post_yield" in var:
+            ps = solver.prestressed_steel
+
+            def pre_stress_variant(total_eps):
+                eps_arr = np.asarray(total_eps, dtype=float)
+                e_pct = 100.0 * eps_arr
+                sigma = np.zeros_like(eps_arr, dtype=float)
+
+                m1 = (e_pct >= 0.0) & (e_pct < 0.6)
+                sigma[m1] = (2000.0 * e_pct[m1]) / ps.gamma_y
+
+                m2 = (e_pct >= 0.6) & (e_pct < 1.0)
+                e = e_pct[m2]
+                sigma[m2] = (-2500.0 * e**2 + 5000.0 * e - 900.0) / ps.gamma_y
+
+                m3 = (e_pct >= 1.0) & (e_pct < 1.75)
+                sigma[m3] = (0.85 * (60.0 * e_pct[m3] + 1540.0)) / ps.gamma_y
+
+                m4 = (e_pct >= 1.75) & (e_pct <= 3.5)
+                sigma[m4] = (0.85 * 1645.0) / ps.gamma_y
+                return sigma
+
+            ps.stress = pre_stress_variant
+
+        rel_mx = []
+        rel_my = []
+        rel_kappa = []
+        rel_cf = []
+        rel_sm = []
+        rel_sp = []
+        for lc, ang in target_rows:
+            solved = solver.solve(float(ang), _case_target(int(lc)))
+            ref_mm = MANUAL_ROWS[(int(lc), float(ang))]
+            ref_diag = MANUAL_ROW_DIAGNOSTICS[(int(lc), float(ang))]
+
+            rel_mx.append(_safe_rel_err(float(solved.get("Mx", np.nan)), float(ref_mm["Mx"])))
+            rel_my.append(_safe_rel_err(float(solved.get("My", np.nan)), float(ref_mm["My"])))
+            rel_kappa.append(_safe_rel_err(float(solved.get("kappa", np.nan)), float(ref_diag["kappa"])))
+            rel_cf.append(_safe_rel_err(float(solved.get("compress_force", np.nan)), float(ref_diag["compress_force"])))
+            rel_sm.append(_safe_rel_err(float(solved.get("strain_mild", np.nan)), _to_permille_ref(ref_diag["strain_mild"])))
+            sp_ref = ref_diag.get("strain_prestressed", None)
+            rel_sp.append(_safe_rel_err(float(solved.get("strain_prestressed", np.nan)), _to_permille_ref(sp_ref) if sp_ref is not None else np.nan))
+
+        rows.append(
+            {
+                "variant": var,
+                "max_rel_err_strain_mild": float(np.nanmax(rel_sm)) if len(rel_sm) else np.nan,
+                "max_rel_err_strain_prestressed": float(np.nanmax(rel_sp)) if len(rel_sp) else np.nan,
+                "max_rel_err_Mx": float(np.nanmax(rel_mx)) if len(rel_mx) else np.nan,
+                "max_rel_err_My": float(np.nanmax(rel_my)) if len(rel_my) else np.nan,
+                "max_rel_err_kappa": float(np.nanmax(rel_kappa)) if len(rel_kappa) else np.nan,
+                "max_rel_err_compress_force": float(np.nanmax(rel_cf)) if len(rel_cf) else np.nan,
+            }
+        )
+
+    out = pd.DataFrame(rows).sort_values("variant").reset_index(drop=True)
+    base = out[out["variant"] == "baseline"].iloc[0]
+    for c in [
+        "max_rel_err_strain_mild",
+        "max_rel_err_strain_prestressed",
+        "max_rel_err_Mx",
+        "max_rel_err_My",
+        "max_rel_err_kappa",
+        "max_rel_err_compress_force",
+    ]:
+        out[f"delta_vs_baseline_{c}"] = out[c] - float(base[c])
+    return out

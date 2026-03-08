@@ -276,8 +276,8 @@ def test_lever_arm_is_centroid_vector_and_not_m_over_compress_override():
     dx_global = dx_local * cos_a - dy_local * sin_a
     dy_global = dx_local * sin_a + dy_local * cos_a
 
-    # Legacy benchmark sign convention uses negated arm components.
-    assert np.isclose(result["lever_DX"], -dx_global, rtol=0.0, atol=1e-9)
+    # Annular-sign re-anchoring keeps DX as comp->tension sign and flips DY only.
+    assert np.isclose(result["lever_DX"], dx_global, rtol=0.0, atol=1e-9)
     assert np.isclose(result["lever_DY"], -dy_global, rtol=0.0, atol=1e-9)
     assert np.isclose(result["lever_L"], np.hypot(dx_global, dy_global), rtol=0.0, atol=1e-9)
 
@@ -300,3 +300,26 @@ def test_strain_outputs_follow_governing_force_bars_with_total_strain():
     assert sc["strain_prestressed_governing_force_bar_id"] == prest["id"]
     assert np.isclose(result["strain_prestressed"], -prest["strain_total"] * 1000.0, rtol=0.0, atol=1e-9)
     assert not np.isclose(result["strain_prestressed"], prest["strain_incremental"] * 1000.0, rtol=0.0, atol=1e-6)
+
+
+def test_annular_dxdy_sign_symmetry_pairs_follow_reference_pattern():
+    for key in ["section0", "sectioniv"]:
+        case = EMBEDDED_BENCHMARK_CASES[key]
+        solver = case.solver_builder()
+        rows = {float(r["angle_v_deg"]): r for r in solver.solve_angle_sweep(case.load.angles_deg, case.load.P_target)}
+
+        for a, b in [(0.0, 180.0), (90.0, 270.0), (45.0, 225.0)]:
+            ra = rows[a]
+            rb = rows[b]
+            refa = case.reference_rows[(case.load_case, a)]
+            refb = case.reference_rows[(case.load_case, b)]
+
+            ref_dx_a = float(refa.get("lever_DX", refa.get("DX", np.nan)))
+            ref_dx_b = float(refb.get("lever_DX", refb.get("DX", np.nan)))
+            ref_dy_a = float(refa.get("lever_DY", refa.get("DY", np.nan)))
+            ref_dy_b = float(refb.get("lever_DY", refb.get("DY", np.nan)))
+
+            if abs(ref_dx_a) > 1e-9 and abs(ref_dx_b) > 1e-9:
+                assert np.sign(float(ra["lever_DX"])) == -np.sign(float(rb["lever_DX"]))
+            if abs(ref_dy_a) > 1e-9 and abs(ref_dy_b) > 1e-9:
+                assert np.sign(float(ra["lever_DY"])) == -np.sign(float(rb["lever_DY"]))

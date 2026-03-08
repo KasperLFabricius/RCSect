@@ -28,6 +28,9 @@ from tests.plastic_diagnostics import (
     run_type6_prestress_mapping_study,
     run_strain_definition_study,
     run_dxdy_sign_transformation_study,
+    run_annular_dxdy_sign_focus_study,
+    run_tbeam_constitutive_audit,
+    run_tbeam_constitutive_variant_study,
 )
 
 
@@ -302,6 +305,9 @@ def main() -> None:
     definition_detail, definition_summary, definition_winners = run_output_definition_study()
     strain_detail, strain_summary, strain_winners = run_strain_definition_study()
     dxdy_detail, dxdy_summary, dxdy_winners, annular_pairs = run_dxdy_sign_transformation_study()
+    annular_dxdy_detail, annular_dxdy_summary = run_annular_dxdy_sign_focus_study()
+    tbeam_constitutive_detail, tbeam_constitutive_summary = run_tbeam_constitutive_audit()
+    tbeam_variant = run_tbeam_constitutive_variant_study()
     zone_partition = run_zone_partition_study()
     semantic_winners = choose_semantic_winners(semantics_summary)
     family_winners = choose_semantic_winners_by_family(semantics_summary)
@@ -331,6 +337,11 @@ def main() -> None:
     dxdy_detail_csv = out_dir / "plastic_dxdy_sign_transformation_study.csv"
     dxdy_summary_md = out_dir / "plastic_dxdy_sign_transformation_summary.md"
     annular_pair_csv = out_dir / "plastic_annular_dxdy_pair_checks.csv"
+    annular_dxdy_csv = out_dir / "plastic_annular_dxdy_sign_focus_study.csv"
+    annular_dxdy_md = out_dir / "plastic_annular_dxdy_sign_focus_summary.md"
+    tbeam_constitutive_csv = out_dir / "plastic_tbeam_constitutive_audit.csv"
+    tbeam_constitutive_md = out_dir / "plastic_tbeam_constitutive_audit_summary.md"
+    tbeam_variant_csv = out_dir / "plastic_tbeam_constitutive_variant_study.csv"
 
     legacy_shift_csv = out_dir / "plastic_legacy_shift.csv"
     legacy_shift_md = out_dir / "plastic_legacy_shift_summary.md"
@@ -370,6 +381,9 @@ def main() -> None:
     strain_detail.to_csv(strain_detail_csv, index=False)
     dxdy_detail.to_csv(dxdy_detail_csv, index=False)
     annular_pairs.to_csv(annular_pair_csv, index=False)
+    annular_dxdy_detail.to_csv(annular_dxdy_csv, index=False)
+    tbeam_constitutive_detail.to_csv(tbeam_constitutive_csv, index=False)
+    tbeam_variant.to_csv(tbeam_variant_csv, index=False)
 
     referenced = detail[detail["Mx_ref"].notna()][
         [
@@ -438,6 +452,17 @@ def main() -> None:
     md_dxdy += "## Best candidate per family\n\n" + _markdown_table(dxdy_family) + "\n\n"
     md_dxdy += "## Annular opposite-angle sign checks (0↔180, 90↔270, 45↔225)\n\n" + _markdown_table(annular_pairs) + "\n"
     dxdy_summary_md.write_text(md_dxdy)
+
+    md_ann = "# Annular DX/DY Sign Focus Study\n\n"
+    md_ann += "Annular family is used as the primary sign/transformation discriminator for DX/DY.\n\n"
+    md_ann += "## Candidate summary\n\n" + _markdown_table(annular_dxdy_summary) + "\n"
+    annular_dxdy_md.write_text(md_ann)
+
+    md_tbeam = "# T-beam Constitutive Audit\n\n"
+    md_tbeam += "This audit checks whether benchmark strain references are close to any solved bar strain (total / incremental / legacy-converted).\n\n"
+    md_tbeam += "## Row-level best gaps\n\n" + _markdown_table(tbeam_constitutive_summary) + "\n\n"
+    md_tbeam += "## Narrow constitutive variant study\n\n" + _markdown_table(tbeam_variant) + "\n"
+    tbeam_constitutive_md.write_text(md_tbeam)
 
     prior_mx, prior_my = _max_rel_errors(prior_summary)
     cur_mx, cur_my = _max_rel_errors(summary)

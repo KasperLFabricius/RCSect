@@ -12,6 +12,9 @@ from tests.plastic_diagnostics import (
     choose_semantic_winners_by_family,
     run_strain_definition_study,
     run_dxdy_sign_transformation_study,
+    run_annular_dxdy_sign_focus_study,
+    run_tbeam_constitutive_audit,
+    run_tbeam_constitutive_variant_study,
 )
 
 
@@ -264,10 +267,10 @@ def test_dxdy_sign_transformation_study_includes_required_candidates_and_annular
     required_candidates = {
         "A_current_centroid_with_explicit_sign_flip",
         "B_centroid_without_explicit_sign_flip",
-        "C_comp_to_tens_local_then_global",
-        "D_tens_to_comp_local_then_global",
-        "E_comp_to_tens_direct_global_no_flip",
-        "F_comp_to_tens_direct_global_with_flip",
+        "C_flip_DX_only",
+        "D_flip_DY_only",
+        "E_comp_to_tens_local_then_global_no_override",
+        "F_tens_to_comp_local_then_global",
         "G_M_over_compress_surrogate_global",
         "H_M_over_compress_surrogate_local_then_global",
     }
@@ -289,3 +292,28 @@ def test_zone_partition_study_artifact_data_is_available_and_comparable():
 
     # At least one family should show different zone-vs-sign reconstruction numerically.
     assert ((df["compress_force_zone"] - df["compress_force_force_sign"]).abs() > 1e-9).any()
+
+
+def test_annular_dxdy_focus_study_identifies_non_blanket_flip_winner():
+    detail, summary = run_annular_dxdy_sign_focus_study()
+    assert not detail.empty
+    assert not summary.empty
+    assert {"candidate", "max_rel_error_DX", "max_rel_error_DY", "quadrant_consistency_rate"}.issubset(summary.columns)
+
+    best = summary.iloc[0]
+    assert best["candidate"] in {"4_flip_DY_only", "6_local_to_global_post_flip_DY"}
+    assert float(best["max_rel_error_DX"]) < 0.01
+    assert float(best["max_rel_error_DY"]) < 0.01
+
+
+def test_tbeam_constitutive_audit_and_variant_study_artifacts_are_available():
+    audit, audit_summary = run_tbeam_constitutive_audit()
+    variants = run_tbeam_constitutive_variant_study()
+
+    assert not audit.empty
+    assert not audit_summary.empty
+    assert not variants.empty
+    assert {"bar_family", "bar_id", "state_label", "strain_total_permille", "stress_mpa", "force_kN"}.issubset(audit.columns)
+    assert {"best_mild_gap_total", "best_mild_gap_legacy", "best_prestress_gap_total", "best_prestress_gap_incremental"}.issubset(audit_summary.columns)
+    assert {"variant", "max_rel_err_strain_mild", "max_rel_err_strain_prestressed", "max_rel_err_Mx", "max_rel_err_kappa"}.issubset(variants.columns)
+    assert "baseline" in set(variants["variant"])
