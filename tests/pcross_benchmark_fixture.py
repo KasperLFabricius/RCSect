@@ -81,9 +81,9 @@ def _build_mild_bars():
     ]
 
 
-def _build_prestress_bars(eps0: float):
+def _build_prestress_bars():
     return [
-        {"id": f"P{i+1}", "x": x, "y": y, "area": PRE_BAR_AREA, "eps0": eps0}
+        {"id": f"P{i+1}", "x": x, "y": y, "area": PRE_BAR_AREA}
         for i, (x, y) in enumerate(PRE_BAR_POINTS)
     ]
 
@@ -115,7 +115,7 @@ def build_pcross_tbeam_solver(
         concrete_outline=CONCRETE_OUTLINE,
         concrete_voids=[],
         rebar_mild=_build_mild_bars(),
-        rebar_prestressed=_build_prestress_bars(prestress_eps0),
+        rebar_prestressed=_build_prestress_bars(),
     )
 
     return PlasticSolver(
@@ -131,11 +131,10 @@ def build_pcross_tbeam_solver(
             gamma_u=benchmark_mapping.gamma_u,
         ),
         prestressed_steel=PrestressedSteelType1(
-            IS=1,
+            IS=100.0 * prestress_eps0,
             gamma_y=benchmark_mapping.gamma_p,
             gamma_E=benchmark_mapping.gamma_E,
             gamma_u=benchmark_mapping.gamma_u,
-            initial_strain=0.0,
         ),
     )
 
@@ -216,7 +215,7 @@ def resolve_type6_mapping(mapping: str | Type6PrestressMapping | None) -> Type6P
     return TYPE6_PRESTRESS_MAPPINGS[mapping]
 
 def _build_pre_bars(points):
-    return [{"id": f"P{i+1}", "x": x, "y": y, "area": a, "eps0": 0.0059} for i, (x, y, a) in enumerate(points)]
+    return [{"id": f"P{i+1}", "x": x, "y": y, "area": a} for i, (x, y, a) in enumerate(points)]
 
 
 def _build_strip_solver(pre_points, p_target, type6_mapping: str | Type6PrestressMapping | None = None):
@@ -241,7 +240,7 @@ def _build_strip_solver(pre_points, p_target, type6_mapping: str | Type6Prestres
             gamma_E=mapping.gamma_E,
         ),
         prestressed_steel=PrestressedSteelType6(
-            IS=6,
+            IS=0.59,
             fytk=1550.0,
             futk=1770.0,
             eut=0.035,
@@ -249,7 +248,6 @@ def _build_strip_solver(pre_points, p_target, type6_mapping: str | Type6Prestres
             gamma_y=1.12,
             gamma_u=mapping.gamma_u,
             gamma_E=mapping.gamma_E,
-            initial_strain=0.0,
         ),
     )
     return solver

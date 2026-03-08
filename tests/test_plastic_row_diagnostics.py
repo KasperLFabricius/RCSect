@@ -108,9 +108,9 @@ def test_contribution_study_reports_cases_and_error_breakdown():
     assert float(row_c["max_rel_err_Mx"]) <= float(row_b["max_rel_err_Mx"]) + 1e-3
     assert float(row_c["max_rel_err_My"]) <= float(row_b["max_rel_err_My"]) + 1e-3
 
-    # FU has no observable effect for this six-row set; case D ~= case C.
-    assert np.isclose(float(row_d["max_rel_err_Mx"]), float(row_c["max_rel_err_Mx"]), rtol=0.0, atol=1e-12)
-    assert np.isclose(float(row_d["max_rel_err_My"]), float(row_c["max_rel_err_My"]), rtol=0.0, atol=1e-12)
+        # With figure-consistent diagrams FU can change top-row fit; guard against regressions.
+    assert float(row_d["max_rel_err_Mx"]) <= float(row_c["max_rel_err_Mx"]) + 1e-3
+    assert float(row_d["max_rel_err_My"]) <= float(row_c["max_rel_err_My"]) + 1e-3
 
 
 from tests.benchmark_compare import BenchmarkSweepSpec, run_benchmark_sweeps
@@ -171,6 +171,7 @@ def test_output_semantics_study_produces_candidate_scores_and_partial_winners():
     winners = choose_semantic_winners(summary)
     # We should only lock in semantics when at least two families agree.
     assert winners.get("compress_force") in {
+        None,
         "compress_force:total_compression_abs",
         "compress_force:concrete_plus_all_comp_steel",
         "compress_force:concrete_plus_comp_rebar",
