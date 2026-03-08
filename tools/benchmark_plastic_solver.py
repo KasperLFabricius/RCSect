@@ -286,36 +286,90 @@ def _build_alignment_matrix(detail):
 
 def _build_unified_progress_summary(detail):
     import pandas as pd
+
     refs = detail[detail["Mx_ref"].notna()].copy()
     mp = {3:"tbeam",4:"tbeam",101:"snit",102:"snit",103:"snit",104:"snit",201:"annular",202:"annular"}
     refs["fixture_family"] = refs["load_case"].map(lambda lc: mp.get(int(lc), f"lc_{int(lc)}"))
+
+    # Supplemental tbeam diagnostics provide non-moment references for the six manual rows.
+    tbeam_diag = diagnose_manual_rows(mapping=DEFAULT_BENCHMARK_MAPPING).copy()
+    tbeam_diag["fixture_family"] = "tbeam"
+
     groups = {
-        "moments":["rel_err_Mx","rel_err_My"],
-        "strains":["rel_err_strain_concrete","rel_err_strain_mild","rel_err_strain_prestressed"],
-        "kappa":["rel_err_kappa"],
-        "compress_force":["rel_err_compress_force"],
-        "lever_arms":["rel_err_L","rel_err_DX","rel_err_DY"],
-        "warnings":["warning_est_match"],
+        "moments": ["rel_err_Mx", "rel_err_My"],
+        "strains": ["rel_err_strain_concrete", "rel_err_strain_mild", "rel_err_strain_prestressed"],
+        "kappa": ["rel_err_kappa"],
+        "compress_force": ["rel_err_compress_force"],
+        "lever_arms": ["rel_err_L", "rel_err_DX", "rel_err_DY"],
+        "warnings": ["warning_est_match"],
     }
-    rows=[]
-    for fam, df in refs.groupby("fixture_family"):
+
+    def _collect_metrics(df, cols):
+        vals = []
+        for c in cols:
+            if c in df.columns:
+                vals.extend(df[c].dropna().tolist())
+        if not vals:
+            return None, None
+        arr = np.array(vals, dtype=float)
+        return float(np.max(arr)), float(np.median(arr))
+
+    rows = []
+    families = ["tbeam", "snit", "annular"]
+    for fam in families:
+        fam_df = refs[refs["fixture_family"] == fam]
         for g, cols in groups.items():
-            if g=="warnings":
-                m = float((1.0 - df["warning_est_match"].fillna(1.0)).max()) if "warning_est_match" in df.columns else np.nan
-                med = float((1.0 - df["warning_est_match"].fillna(1.0)).median()) if "warning_est_match" in df.columns else np.nan
-            else:
-                vals=[]
-                for c in cols:
-                    if c in df.columns:
-                        vals.extend(df[c].dropna().tolist())
-                if not vals:
-                    m=np.nan; med=np.nan
+            source = "benchmark_detail"
+            note = ""
+            unresolved = False
+
+            if g == "warnings":
+                if "warning_est_match" in fam_df.columns and fam_df["warning_est_match"].notna().any():
+                    mismatch = 1.0 - fam_df["warning_est_match"].fillna(1.0)
+                    m, med = float(mismatch.max()), float(mismatch.median())
                 else:
-                    arr=np.array(vals,dtype=float)
-                    m=float(np.max(arr)); med=float(np.median(arr))
-            bucket = "above 5%" if not np.isfinite(m) or m>0.05 else ("between 1% and 5%" if m>=0.01 else "below 1%")
-            rows.append({"fixture_family":fam,"output_group":g,"max_relative_error":m,"median_relative_error":med,"status_bucket":bucket})
-    return pd.DataFrame(rows).sort_values(["fixture_family","output_group"]).reset_index(drop=True)
+                    m, med = None, None
+            else:
+                m, med = _collect_metrics(fam_df, cols)
+
+            # T-beam has dedicated manual-row diagnostic references for non-moment groups.
+            if fam == "tbeam" and g != "moments" and (m is None or med is None):
+                source = "manual_row_diagnostics"
+                diag_col_map = {
+                    "strains": ["rel_strain_concrete", "rel_strain_mild", "rel_strain_prestressed"],
+                    "kappa": ["rel_kappa"],
+                    "compress_force": ["rel_compress_force"],
+                    "lever_arms": ["rel_lever_L", "rel_lever_DX", "rel_lever_DY"],
+                }
+                if g in diag_col_map:
+                    m, med = _collect_metrics(tbeam_diag, diag_col_map[g])
+                    note = "computed from tbeam manual diagnostic rows"
+
+            if m is None or med is None:
+                unresolved = True
+                note = note or "insufficient reference rows in current benchmark corpus"
+                max_val = 1.0
+                med_val = 1.0
+                bucket = "above 5%"
+            else:
+                max_val = float(m)
+                med_val = float(med)
+                bucket = "above 5%" if max_val > 0.05 else ("between 1% and 5%" if max_val >= 0.01 else "below 1%")
+
+            rows.append(
+                {
+                    "fixture_family": fam,
+                    "output_group": g,
+                    "max_relative_error": max_val,
+                    "median_relative_error": med_val,
+                    "status_bucket": bucket,
+                    "metric_source": source,
+                    "explicit_unresolved": unresolved,
+                    "availability_note": note,
+                }
+            )
+
+    return pd.DataFrame(rows).sort_values(["fixture_family", "output_group"]).reset_index(drop=True)
 
 
 def _ambiguous_output_conclusion(
@@ -355,6 +409,56 @@ def _ambiguous_output_conclusion(
             }
         )
     return pd.DataFrame(rows)
+
+
+
+def _build_remaining_blockers(unified_progress, alignment):
+    import pandas as pd
+
+    align_map = {}
+    for _, r in alignment.iterrows():
+        key = str(r.get("item", "")).strip().lower()
+        align_map[key] = str(r.get("status", "")).strip().lower()
+
+    def classify(family, group, row):
+        max_err = float(row["max_relative_error"])
+        status = str(row.get("status_bucket", ""))
+        unresolved = bool(row.get("explicit_unresolved", False))
+        if unresolved:
+            return "unresolved / insufficient data"
+        if group in {"kappa", "compress_force"}:
+            return "material-family behavior"
+        if group == "moments":
+            return "transformation/orientation"
+        if group == "lever_arms":
+            return "transformation/orientation"
+        if group == "warnings":
+            return "convention/sign" if max_err > 0 else "output-definition ambiguity"
+        # strains
+        strain_align = align_map.get("strain_mild", "")
+        if status == "below 1%":
+            return "convention/sign"
+        if "not aligned" in strain_align and family in {"snit", "annular", "tbeam"}:
+            return "output-definition ambiguity"
+        return "material-family behavior"
+
+    rows = []
+    for _, r in unified_progress.iterrows():
+        fam = r["fixture_family"]
+        grp = r["output_group"]
+        rows.append(
+            {
+                "fixture_family": fam,
+                "output_group": grp,
+                "max_relative_error": float(r["max_relative_error"]),
+                "median_relative_error": float(r["median_relative_error"]),
+                "status_bucket": r["status_bucket"],
+                "blocker_classification": classify(fam, grp, r),
+                "note": r.get("availability_note", ""),
+            }
+        )
+    return pd.DataFrame(rows).sort_values(["fixture_family", "output_group"]).reset_index(drop=True)
+
 
 def main() -> None:
     out_dir = Path("artifacts") / "benchmark"
@@ -451,6 +555,8 @@ def main() -> None:
     alignment_md = out_dir / "plastic_alignment_matrix.md"
     unified_progress_csv = out_dir / "plastic_unified_progress_summary.csv"
     unified_progress_md = out_dir / "plastic_unified_progress_summary.md"
+    remaining_blockers_csv = out_dir / "plastic_remaining_blockers.csv"
+    remaining_blockers_md = out_dir / "plastic_remaining_blockers.md"
 
     legacy_shift_csv = out_dir / "plastic_legacy_shift.csv"
     legacy_shift_md = out_dir / "plastic_legacy_shift_summary.md"
@@ -660,6 +766,10 @@ def main() -> None:
     unified_progress.to_csv(unified_progress_csv, index=False)
     unified_progress_md.write_text("# Plastic unified progress summary\n\n" + _markdown_table(unified_progress) + "\n", encoding="utf-8")
 
+    remaining_blockers = _build_remaining_blockers(unified_progress, alignment)
+    remaining_blockers.to_csv(remaining_blockers_csv, index=False)
+    remaining_blockers_md.write_text("# Plastic remaining blockers\n\n" + _markdown_table(remaining_blockers) + "\n", encoding="utf-8")
+
     print(f"Wrote {detail_csv}")
     print(f"Wrote {summary_csv}")
     print(f"Wrote {summary_md}")
@@ -681,6 +791,8 @@ def main() -> None:
     print(f"Wrote {alignment_md}")
     print(f"Wrote {unified_progress_csv}")
     print(f"Wrote {unified_progress_md}")
+    print(f"Wrote {remaining_blockers_csv}")
+    print(f"Wrote {remaining_blockers_md}")
 
 
 if __name__ == "__main__":
