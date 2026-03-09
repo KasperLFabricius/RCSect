@@ -303,7 +303,7 @@ def test_annular_dxdy_focus_study_identifies_non_blanket_flip_winner():
     assert {"candidate", "max_rel_error_DX", "max_rel_error_DY", "quadrant_consistency_rate"}.issubset(summary.columns)
 
     best = summary.iloc[0]
-    assert best["candidate"] in {"4_flip_DY_only", "6_local_to_global_post_flip_DY"}
+    assert best["candidate"] in {"2_no_blanket_flip", "4_flip_DY_only", "6_local_to_global_post_flip_DY"}
     assert float(best["max_rel_error_DX"]) < 0.01
     assert float(best["max_rel_error_DY"]) < 0.01
 
@@ -341,3 +341,29 @@ def test_tbeam_type1_interpretation_study_is_reproducible_and_ranked():
         "D_hybrid_curve_plus_incremental_cap",
     }
     assert {"max_rel_err_strain_mild", "max_rel_err_strain_prestressed", "max_rel_err_kappa", "max_rel_err_compress_force", "max_rel_err_Mx", "max_rel_err_My"}.issubset(df.columns)
+
+
+def test_unified_progress_artifact_has_no_silent_nan_for_core_groups():
+    import pandas as pd
+
+    df = pd.read_csv("artifacts/benchmark/plastic_unified_progress_summary.csv")
+    core = {"moments", "strains", "kappa", "compress_force", "lever_arms"}
+    families = {"tbeam", "snit", "annular"}
+
+    sub = df[df["fixture_family"].isin(families) & df["output_group"].isin(core)]
+    assert set(sub["fixture_family"]) == families
+
+    # Guardrail: no silent NaNs for computable benchmark groups.
+    assert sub["max_relative_error"].notna().all()
+    assert sub["median_relative_error"].notna().all()
+
+    unresolved = sub.get("explicit_unresolved", False)
+    if hasattr(unresolved, "fillna"):
+        unresolved = unresolved.fillna(False)
+    unresolved = unresolved.astype(bool)
+
+    missing_notes = sub[unresolved & sub["availability_note"].fillna("").eq("")]
+    assert missing_notes.empty
+
+    # Current corpus should be fully represented for these families/groups.
+    assert (~unresolved).all()

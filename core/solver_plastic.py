@@ -3,6 +3,14 @@ from scipy.optimize import brentq
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.ops import triangulate
 from core.geometry import split_compression_zone
+from core.solver_conventions import (
+    build_internal_arm_vector,
+    classify_zone_from_total_strain,
+    format_reported_strain,
+    rotate_moment_local_to_global,
+    rotate_vector_local_to_global,
+    to_compression_positive,
+)
 import warnings
 
 
@@ -216,18 +224,16 @@ class PlasticSolver:
         pivot_type = candidate['pivot']
         forces_data = self._calculate_detailed_internal_forces(y_na_solution, kappa)
         
-        # 1. Coordinate Transformations
         angle_rad = np.radians(self.cs.local_rotation_deg(angle_v_deg))
-        cos_a = np.cos(angle_rad)
-        sin_a = np.sin(angle_rad)
-
-        # Transform local moments (x', y') back to global (x, y): R(phi).
-        # Keep global sign convention aligned with embedded PCROSS benchmark rows
-        # (positive Mx/My for the referenced LC3/LC4 rows in this repository).
-        Mx_global = -(forces_data['Mx_rot'] * cos_a - forces_data['My_rot'] * sin_a)
-        My_global = forces_data['Mx_rot'] * sin_a + forces_data['My_rot'] * cos_a
+        Mx_global, My_global = rotate_moment_local_to_global(
+            forces_data['Mx_rot'],
+            forces_data['My_rot'],
+            angle_rad,
+        )
         
         # [cite_start]2. Neutral Axis Intersections [cite: 760]
+        cos_a = np.cos(angle_rad)
+        sin_a = np.sin(angle_rad)
         intersection_y = y_na_solution / cos_a if abs(cos_a) > 1e-6 else float('inf')
         intersection_x = y_na_solution / sin_a if abs(sin_a) > 1e-6 else float('inf')
 
@@ -235,62 +241,16 @@ class PlasticSolver:
         internal_concrete_strain = kappa * (self.y_top - y_na_solution) * 1000.0  # per mille
         max_concrete_strain = internal_concrete_strain  # already compression-positive internally
 
-        # Direct legacy-style reconstruction:
-        # governing bar per family = bar with largest absolute force magnitude.
-        mild_gov = _governing_bar_by_force(forces_data['mild_bar_details'])
-        pre_gov = _governing_bar_by_force(forces_data['prestressed_bar_details'])
-
-        internal_mild_strain = float(mild_gov['strain_total'] * 1000.0) if mild_gov is not None else 0.0
-        internal_prestressed_strain = float(pre_gov['strain_total'] * 1000.0) if pre_gov is not None else None
-        # Legacy PCROSS printed convention: compression positive, tension negative.
-        max_mild_strain = -internal_mild_strain
-        max_prestressed_strain = (-internal_prestressed_strain) if internal_prestressed_strain is not None else None
-
-        # [cite_start]4. Lever Arm Calculations [cite: 762, 763, 773, 784]
-        # Compression resultant centroid is force-weighted over:
-        # concrete compression + compression mild + compression prestress.
-        # Tension resultant centroid is force-weighted over:
-        # tension mild + tension prestress.
-        # Legacy output reconstruction uses zone-based centroids.
-        c_comp = {'x': forces_data.get('zone_comp_centroid_x'), 'y': forces_data.get('zone_comp_centroid_y')}
-        c_tens = {'x': forces_data.get('zone_tens_centroid_x'), 'y': forces_data.get('zone_tens_centroid_y')}
-
-        # Geometric internal-arm vector is tension-zone minus compression-zone centroid.
-        dx_arm_rot = c_tens['x'] - c_comp['x'] if (c_tens['x'] is not None and c_comp['x'] is not None) else 0.0
-        dy_arm_rot = c_tens['y'] - c_comp['y'] if (c_tens['y'] is not None and c_comp['y'] is not None) else 0.0
-        # Annular benchmark sign discriminator shows asymmetric legacy reporting:
-        # DX follows comp->tension arm sign, DY is reported with a sign inversion.
-        DX_rot = dx_arm_rot
-        DY_rot = -dy_arm_rot
-
-        DX_global = DX_rot * cos_a - DY_rot * sin_a
-        DY_global = DX_rot * sin_a + DY_rot * cos_a
-        L = np.sqrt(DX_global**2 + DY_global**2)
-
-        # COMPRESS FORCE per legacy decomposition (positive magnitude):
-        # concrete compression + compression mild + compression prestress.
-        comp_force = float(
-            forces_data['zone_compression_concrete']
-            + forces_data['zone_compression_mild']
-            + forces_data['zone_compression_prestress']
-        )
-        
-        # [cite_start]5. Safety Warnings [cite: 766, 767]
-        warning_flag = None
-        if forces_data['compression_rebar_force'] > self.N_c_util:
-            warning_flag = "W2"
-        elif forces_data['compression_rebar_force'] > 0.5 * self.N_c_util:
-            warning_flag = "W1"
-
-        full_design_concrete_force = float(self.N_c_util)
-        compression_rebar_force = float(forces_data['compression_rebar_force'])
+        reported = self.build_reported_outputs(forces_data=forces_data, angle_rad=angle_rad)
+        mild_gov = reported['mild_gov']
+        pre_gov = reported['pre_gov']
 
         return {
             "angle_v_deg": float(angle_v_deg),
             "y_na": y_na_solution,
             "kappa": kappa,
             "pivot": pivot_type,
-            "N_calc": self._to_compression_positive(forces_data['N_tot']),
+            "N_calc": to_compression_positive(forces_data['N_tot']),
             "N_internal_signed": forces_data['N_tot'],
             "Mx_local": forces_data['Mx_rot'],
             "My_local": forces_data['My_rot'],
@@ -298,23 +258,23 @@ class PlasticSolver:
             "My": My_global,
             "na_intersect_x": intersection_x,
             "na_intersect_y": intersection_y,
-            "strain_concrete": max_concrete_strain,
-            "strain_mild": max_mild_strain,
-            "strain_prestressed": max_prestressed_strain,
+            "strain_concrete": reported['strain_concrete'],
+            "strain_mild": reported['strain_mild'],
+            "strain_prestressed": reported['strain_prestressed'],
             "internal_strain_concrete": internal_concrete_strain,
-            "internal_strain_mild": internal_mild_strain,
-            "internal_strain_prestressed": internal_prestressed_strain,
-            "compress_force": comp_force,
+            "internal_strain_mild": reported['internal_strain_mild'],
+            "internal_strain_prestressed": reported['internal_strain_prestressed'],
+            "compress_force": reported['compress_force'],
             "compress_zone_force_concrete": float(forces_data['zone_compression_concrete']),
             "compress_zone_force_mild": float(forces_data['zone_compression_mild']),
             "compress_zone_force_prestressed": float(forces_data['zone_compression_prestress']),
-            "compress_zone_force_total": comp_force,
-            "lever_L": L,
-            "lever_DX": DX_global,
-            "lever_DY": DY_global,
-            "warning": warning_flag,
-            "compression_rebar_force": compression_rebar_force,
-            "full_design_concrete_force": full_design_concrete_force,
+            "compress_zone_force_total": reported['compress_force'],
+            "lever_L": reported['lever_L'],
+            "lever_DX": reported['lever_DX'],
+            "lever_DY": reported['lever_DY'],
+            "warning": reported['warning'],
+            "compression_rebar_force": reported['compression_rebar_force'],
+            "full_design_concrete_force": reported['full_design_concrete_force'],
             "residual_abs": candidate.get('residual_abs', abs(self._equilibrium_target(y_na_solution, candidate.get('P_target', 0.0), pivot_type))),
             "debug_force_components": forces_data,
             "debug_resultant_centroids": {
@@ -333,14 +293,61 @@ class PlasticSolver:
                 "strain_mild_governing_abs_permille": _max_by_abs(forces_data['mild_strains_total_permille']),
                 "strain_mild_governing_force_bar_id": mild_gov.get('id') if mild_gov is not None else None,
                 "strain_mild_governing_force_bar_internal_strain_permille": float(mild_gov['strain_total'] * 1000.0) if mild_gov is not None else None,
-                "strain_mild_governing_force_bar_reported_legacy_permille": (-float(mild_gov['strain_total'] * 1000.0)) if mild_gov is not None else None,
+                "strain_mild_governing_force_bar_reported_legacy_permille": format_reported_strain(float(mild_gov['strain_total'] * 1000.0)) if mild_gov is not None else None,
                 "strain_prestressed_max_tension_permille": max(forces_data['prestressed_strains_total_permille']) if forces_data['prestressed_strains_total_permille'] else None,
                 "strain_prestressed_max_compression_permille": min(forces_data['prestressed_strains_total_permille']) if forces_data['prestressed_strains_total_permille'] else None,
                 "strain_prestressed_governing_abs_permille": _max_by_abs(forces_data['prestressed_strains_total_permille']),
                 "strain_prestressed_governing_force_bar_id": pre_gov.get('id') if pre_gov is not None else None,
                 "strain_prestressed_governing_force_bar_internal_strain_permille": float(pre_gov['strain_total'] * 1000.0) if pre_gov is not None else None,
-                "strain_prestressed_governing_force_bar_reported_legacy_permille": (-float(pre_gov['strain_total'] * 1000.0)) if pre_gov is not None else None,
+                "strain_prestressed_governing_force_bar_reported_legacy_permille": format_reported_strain(float(pre_gov['strain_total'] * 1000.0)) if pre_gov is not None else None,
             },
+        }
+
+    def build_reported_outputs(self, *, forces_data: dict, angle_rad: float) -> dict:
+        mild_gov = _governing_bar_by_force(forces_data['mild_bar_details'])
+        pre_gov = _governing_bar_by_force(forces_data['prestressed_bar_details'])
+
+        internal_mild_strain = float(mild_gov['strain_total'] * 1000.0) if mild_gov is not None else 0.0
+        internal_prestressed_strain = float(pre_gov['strain_total'] * 1000.0) if pre_gov is not None else None
+        strain_concrete = float(forces_data['max_concrete_strain_permille'])
+
+        dx_local, dy_local = build_internal_arm_vector(
+            forces_data.get('zone_comp_centroid_x'),
+            forces_data.get('zone_comp_centroid_y'),
+            forces_data.get('zone_tens_centroid_x'),
+            forces_data.get('zone_tens_centroid_y'),
+        )
+        dx_global, dy_global = rotate_vector_local_to_global(dx_local, dy_local, angle_rad)
+
+        compress_force = float(
+            forces_data['zone_compression_concrete']
+            + forces_data['zone_compression_mild']
+            + forces_data['zone_compression_prestress']
+        )
+
+        warning_flag = None
+        compression_rebar_force = float(forces_data['compression_rebar_force'])
+        full_design_concrete_force = float(self.N_c_util)
+        if compression_rebar_force > full_design_concrete_force:
+            warning_flag = "W2"
+        elif compression_rebar_force > 0.5 * full_design_concrete_force:
+            warning_flag = "W1"
+
+        return {
+            'strain_concrete': format_reported_strain(-strain_concrete),
+            'strain_mild': format_reported_strain(internal_mild_strain),
+            'strain_prestressed': format_reported_strain(internal_prestressed_strain),
+            'internal_strain_mild': internal_mild_strain,
+            'internal_strain_prestressed': internal_prestressed_strain,
+            'compress_force': compress_force,
+            'lever_L': float(np.hypot(dx_global, dy_global)),
+            'lever_DX': float(dx_global),
+            'lever_DY': float(dy_global),
+            'warning': warning_flag,
+            'compression_rebar_force': compression_rebar_force,
+            'full_design_concrete_force': full_design_concrete_force,
+            'mild_gov': mild_gov,
+            'pre_gov': pre_gov,
         }
 
     def _equilibrium_target(self, y_na: float, P_target: float, pivot: str) -> float:
@@ -353,19 +360,8 @@ class PlasticSolver:
             kappa = self.mild_steel.eps_ud / (y_na - self.y_steel_min)
             
         forces = self._calculate_detailed_internal_forces(y_na, kappa)
-        N_internal = self._to_compression_positive(forces['N_tot'])
+        N_internal = to_compression_positive(forces['N_tot'])
         return N_internal - P_target
-
-    @staticmethod
-    def _to_compression_positive(N_internal_signed: float) -> float:
-        """
-        Convert solver internal resultant to compression-positive convention.
-
-        Internal accumulation uses force sign from material stress:
-        tension positive, compression negative. This helper converts to the
-        external N_Ed convention where compression is positive.
-        """
-        return -N_internal_signed
 
     def _solve_pivot_candidate(self, P_target: float, pivot: str, y_min: float, y_max: float):
         bracket = self._find_bracket(P_target, pivot, y_min, y_max)
@@ -477,7 +473,7 @@ class PlasticSolver:
                 sum_y_tens += force * bar['y']
 
             # Geometric zone by solved strain field at bar location.
-            if eps < 0.0:
+            if classify_zone_from_total_strain(eps) == 'compression':
                 # Zone-based compression contribution uses compression-positive sign.
                 zf = -force
                 zone_comp_mild += zf
@@ -531,7 +527,7 @@ class PlasticSolver:
                     sum_y_tens += force * bar['y']
 
                 # Geometric zone classification for prestress bars uses incremental (section) strain sign.
-                if geometric_eps < 0.0:
+                if classify_zone_from_total_strain(geometric_eps) == 'compression':
                     zf = -force
                     zone_comp_prestress += zf
                     w = abs(zf)
@@ -659,6 +655,7 @@ class PlasticSolver:
             'prestressed_stresses_mpa': [float(r['stress_mpa']) for r in prestressed_bar_rows],
             'mild_forces_kN': [float(r['force_kN']) for r in mild_bar_rows],
             'prestressed_forces_kN': [float(r['force_kN']) for r in prestressed_bar_rows],
+            'max_concrete_strain_permille': float(kappa * (self.y_top - y_na) * 1000.0),
         }
 
     def _integrate_parabola(self, polygon, y_na, kappa):
