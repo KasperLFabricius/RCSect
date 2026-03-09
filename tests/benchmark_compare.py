@@ -126,6 +126,24 @@ def _semantic_outputs(row: dict, profile: str = "reported") -> dict[str, float]:
         dx_conc = float(c_conc["x"] - c_tens["x"])
         dy_conc = float(c_conc["y"] - c_tens["y"])
 
+
+    if profile == "legacy_force_tension_centroid":
+        sc = row.get("debug_strain_candidates", {}) or {}
+        c = row.get("debug_resultant_centroids", {}) or {}
+        dx = dy = l = np.nan
+        if c.get("compress_zone_centroid_x") is not None and c.get("tension_zone_centroid_x") is not None and c.get("compress_zone_centroid_y") is not None and c.get("tension_zone_centroid_y") is not None:
+            dx = float(c["tension_zone_centroid_x"] - c["compress_zone_centroid_x"])
+            dy = float(c["tension_zone_centroid_y"] - c["compress_zone_centroid_y"])
+            l = float(np.hypot(dx, dy))
+        return {
+            "strain_mild": sc.get("strain_mild_governing_force_bar_reported_legacy_permille", reported["strain_mild"]),
+            "strain_prestressed": sc.get("strain_prestressed_governing_force_bar_reported_legacy_permille", reported["strain_prestressed"]),
+            "compress_force": reported["compress_force"],
+            "L": l if np.isfinite(l) else reported["L"],
+            "DX": dx if np.isfinite(dx) else reported["DX"],
+            "DY": dy if np.isfinite(dy) else reported["DY"],
+        }
+
     if profile == "semantic_aligned":
         # Conservative semantic alignment profile based on study winners that
         # were consistent across fixture families. For ambiguous outputs

@@ -4,11 +4,9 @@ from shapely.geometry import MultiPolygon, Polygon
 from shapely.ops import triangulate
 from core.geometry import split_compression_zone
 from core.solver_conventions import (
-    build_internal_arm_vector,
     classify_zone_from_total_strain,
     format_reported_strain,
     rotate_moment_local_to_global,
-    rotate_vector_local_to_global,
     to_compression_positive,
 )
 import warnings
@@ -48,6 +46,12 @@ def _governing_bar_by_force(rows: list[dict]) -> dict | None:
     if not rows:
         return None
     return max(rows, key=lambda r: abs(float(r.get("force_kN", 0.0))))
+
+
+def _governing_bar_by_section_strain(rows: list[dict]) -> dict | None:
+    if not rows:
+        return None
+    return max(rows, key=lambda r: abs(float(r.get("strain_section", 0.0))))
 
 
 class PlasticSolver:
@@ -241,9 +245,11 @@ class PlasticSolver:
         internal_concrete_strain = kappa * (self.y_top - y_na_solution) * 1000.0  # per mille
         max_concrete_strain = internal_concrete_strain  # already compression-positive internally
 
-        reported = self.build_reported_outputs(forces_data=forces_data, angle_rad=angle_rad)
+        reported = self.build_reported_outputs(forces_data=forces_data, angle_rad=angle_rad, mx_global=Mx_global, my_global=My_global)
         mild_gov = reported['mild_gov']
         pre_gov = reported['pre_gov']
+        mild_gov_force = reported['mild_gov_force']
+        pre_gov_force = reported['pre_gov_force']
 
         return {
             "angle_v_deg": float(angle_v_deg),
@@ -272,6 +278,13 @@ class PlasticSolver:
             "lever_L": reported['lever_L'],
             "lever_DX": reported['lever_DX'],
             "lever_DY": reported['lever_DY'],
+            "U": reported['U'],
+            "U_norm": reported['U_norm'],
+            "R": reported['R'],
+            "x_load": reported['x_load'],
+            "y_load": reported['y_load'],
+            "load_point_defined": reported['load_point_defined'],
+            "load_point_in_tension_zone": reported['load_point_in_tension_zone'],
             "warning": reported['warning'],
             "compression_rebar_force": reported['compression_rebar_force'],
             "full_design_concrete_force": reported['full_design_concrete_force'],
@@ -288,36 +301,85 @@ class PlasticSolver:
                 "tension_zone_centroid_y": forces_data.get("zone_tens_centroid_y"),
             },
             "debug_strain_candidates": {
+                "load_point_defined": reported['load_point_defined'],
+                "load_point_in_tension_zone": reported['load_point_in_tension_zone'],
                 "strain_mild_max_tension_permille": max(forces_data['mild_strains_total_permille']) if forces_data['mild_strains_total_permille'] else None,
                 "strain_mild_max_compression_permille": min(forces_data['mild_strains_total_permille']) if forces_data['mild_strains_total_permille'] else None,
                 "strain_mild_governing_abs_permille": _max_by_abs(forces_data['mild_strains_total_permille']),
-                "strain_mild_governing_force_bar_id": mild_gov.get('id') if mild_gov is not None else None,
-                "strain_mild_governing_force_bar_internal_strain_permille": float(mild_gov['strain_total'] * 1000.0) if mild_gov is not None else None,
-                "strain_mild_governing_force_bar_reported_legacy_permille": format_reported_strain(float(mild_gov['strain_total'] * 1000.0)) if mild_gov is not None else None,
+                "strain_mild_governing_force_bar_id": mild_gov_force.get('id') if mild_gov_force is not None else None,
+                "strain_mild_governing_force_bar_internal_strain_permille": float(mild_gov_force['strain_total'] * 1000.0) if mild_gov_force is not None else None,
+                "strain_mild_governing_force_bar_reported_legacy_permille": format_reported_strain(float(mild_gov_force['strain_total'] * 1000.0)) if mild_gov_force is not None else None,
+                "selected_mild_bar_id": mild_gov.get('id') if mild_gov is not None else None,
+                "selected_mild_bar_section_strain_internal": float(mild_gov['strain_section']) if mild_gov is not None else None,
+                "selected_mild_bar_section_strain_reported": format_reported_strain(float(mild_gov['strain_section'] * 1000.0)) if mild_gov is not None else None,
+                "selected_mild_bar_total_force": float(mild_gov['force_kN']) if mild_gov is not None else None,
+                "selected_mild_bar_zone": classify_zone_from_total_strain(float(mild_gov['strain_section'])) if mild_gov is not None else None,
                 "strain_prestressed_max_tension_permille": max(forces_data['prestressed_strains_total_permille']) if forces_data['prestressed_strains_total_permille'] else None,
                 "strain_prestressed_max_compression_permille": min(forces_data['prestressed_strains_total_permille']) if forces_data['prestressed_strains_total_permille'] else None,
                 "strain_prestressed_governing_abs_permille": _max_by_abs(forces_data['prestressed_strains_total_permille']),
-                "strain_prestressed_governing_force_bar_id": pre_gov.get('id') if pre_gov is not None else None,
-                "strain_prestressed_governing_force_bar_internal_strain_permille": float(pre_gov['strain_total'] * 1000.0) if pre_gov is not None else None,
-                "strain_prestressed_governing_force_bar_reported_legacy_permille": format_reported_strain(float(pre_gov['strain_total'] * 1000.0)) if pre_gov is not None else None,
+                "strain_prestressed_governing_force_bar_id": pre_gov_force.get('id') if pre_gov_force is not None else None,
+                "strain_prestressed_governing_force_bar_internal_strain_permille": float(pre_gov_force['strain_total'] * 1000.0) if pre_gov_force is not None else None,
+                "strain_prestressed_governing_force_bar_reported_legacy_permille": format_reported_strain(float(pre_gov_force['strain_total'] * 1000.0)) if pre_gov_force is not None else None,
+                "selected_prestress_bar_id": pre_gov.get('id') if pre_gov is not None else None,
+                "selected_prestress_bar_section_strain_internal": float(pre_gov['strain_section']) if pre_gov is not None else None,
+                "selected_prestress_bar_section_strain_reported": format_reported_strain(float(pre_gov['strain_section'] * 1000.0)) if pre_gov is not None else None,
+                "selected_prestress_bar_total_strain_internal": float(pre_gov['strain_total']) if pre_gov is not None else None,
+                "selected_prestress_bar_force": float(pre_gov['force_kN']) if pre_gov is not None else None,
+                "selected_prestress_bar_zone": classify_zone_from_total_strain(float(pre_gov['strain_section'])) if pre_gov is not None else None,
             },
         }
 
-    def build_reported_outputs(self, *, forces_data: dict, angle_rad: float) -> dict:
-        mild_gov = _governing_bar_by_force(forces_data['mild_bar_details'])
-        pre_gov = _governing_bar_by_force(forces_data['prestressed_bar_details'])
+    def _build_load_point_outputs(self, *, forces_data: dict, mx_global: float, my_global: float) -> dict:
+        tiny = 1e-12
+        p_target = to_compression_positive(forces_data['N_tot'])
+        load_defined = abs(p_target) > tiny
+        if not load_defined:
+            return {
+                'load_point_defined': False,
+                'x_load': None,
+                'y_load': None,
+                'lever_DX': None,
+                'lever_DY': None,
+                'lever_L': None,
+                'U_raw_deg': None,
+                'U_deg': None,
+                'R': None,
+                'load_point_in_tension_zone': False,
+            }
 
-        internal_mild_strain = float(mild_gov['strain_total'] * 1000.0) if mild_gov is not None else 0.0
-        internal_prestressed_strain = float(pre_gov['strain_total'] * 1000.0) if pre_gov is not None else None
+        x_load = float(my_global) / float(p_target)
+        y_load = float(mx_global) / float(p_target)
+        x_comp = forces_data.get('zone_comp_centroid_x')
+        y_comp = forces_data.get('zone_comp_centroid_y')
+        dx = float(x_load - x_comp) if x_comp is not None else None
+        dy = float(y_load - y_comp) if y_comp is not None else None
+        l = float(np.hypot(dx, dy)) if dx is not None and dy is not None else None
+        u_raw = float(np.degrees(np.arctan2(y_load, x_load)))
+        u_norm = float((u_raw + 360.0) % 360.0)
+        load_point_in_tension_zone = classify_zone_from_total_strain(float(forces_data['kappa']) * (float(forces_data['y_na']) - y_load)) == 'tension'
+        return {
+            'load_point_defined': True,
+            'x_load': x_load,
+            'y_load': y_load,
+            'lever_DX': dx,
+            'lever_DY': dy,
+            'lever_L': l,
+            'U_raw_deg': u_raw,
+            'U_deg': u_norm,
+            'R': float(np.hypot(x_load, y_load)),
+            'load_point_in_tension_zone': load_point_in_tension_zone,
+        }
+
+    def build_reported_outputs(self, *, forces_data: dict, angle_rad: float, mx_global: float, my_global: float) -> dict:
+        mild_gov_force = _governing_bar_by_force(forces_data['mild_bar_details'])
+        pre_gov_force = _governing_bar_by_force(forces_data['prestressed_bar_details'])
+        mild_gov = _governing_bar_by_section_strain(forces_data['mild_bar_details'])
+        pre_gov = _governing_bar_by_section_strain(forces_data['prestressed_bar_details'])
+
+        internal_mild_strain = float(mild_gov['strain_section'] * 1000.0) if mild_gov is not None else 0.0
+        internal_prestressed_strain = float(pre_gov['strain_section'] * 1000.0) if pre_gov is not None else None
         strain_concrete = float(forces_data['max_concrete_strain_permille'])
-
-        dx_local, dy_local = build_internal_arm_vector(
-            forces_data.get('zone_comp_centroid_x'),
-            forces_data.get('zone_comp_centroid_y'),
-            forces_data.get('zone_tens_centroid_x'),
-            forces_data.get('zone_tens_centroid_y'),
-        )
-        dx_global, dy_global = rotate_vector_local_to_global(dx_local, dy_local, angle_rad)
+        load_point = self._build_load_point_outputs(forces_data=forces_data, mx_global=mx_global, my_global=my_global)
 
         compress_force = float(
             forces_data['zone_compression_concrete']
@@ -340,14 +402,23 @@ class PlasticSolver:
             'internal_strain_mild': internal_mild_strain,
             'internal_strain_prestressed': internal_prestressed_strain,
             'compress_force': compress_force,
-            'lever_L': float(np.hypot(dx_global, dy_global)),
-            'lever_DX': float(dx_global),
-            'lever_DY': float(dy_global),
+            'lever_L': load_point['lever_L'],
+            'lever_DX': load_point['lever_DX'],
+            'lever_DY': load_point['lever_DY'],
+            'U': load_point['U_raw_deg'],
+            'U_norm': load_point['U_deg'],
+            'R': load_point['R'],
+            'x_load': load_point['x_load'],
+            'y_load': load_point['y_load'],
+            'load_point_defined': load_point['load_point_defined'],
+            'load_point_in_tension_zone': load_point['load_point_in_tension_zone'],
             'warning': warning_flag,
             'compression_rebar_force': compression_rebar_force,
             'full_design_concrete_force': full_design_concrete_force,
             'mild_gov': mild_gov,
             'pre_gov': pre_gov,
+            'mild_gov_force': mild_gov_force,
+            'pre_gov_force': pre_gov_force,
         }
 
     def _equilibrium_target(self, y_na: float, P_target: float, pivot: str) -> float:
@@ -494,6 +565,7 @@ class PlasticSolver:
                     'id': bar.get('id'),
                     'x': float(bar['x']),
                     'y': float(bar['y']),
+                    'strain_section': float(eps),
                     'strain_total': float(eps),
                     'stress_mpa': float(sigma),
                     'force_kN': float(force),
@@ -547,6 +619,7 @@ class PlasticSolver:
                         'id': bar.get('id'),
                         'x': float(bar['x']),
                         'y': float(bar['y']),
+                        'strain_section': float(geometric_eps),
                         'strain_geometric': float(geometric_eps),
                         'strain_eps0': float(eps0_eff),
                         'strain_incremental': float(geometric_eps),
@@ -656,6 +729,8 @@ class PlasticSolver:
             'mild_forces_kN': [float(r['force_kN']) for r in mild_bar_rows],
             'prestressed_forces_kN': [float(r['force_kN']) for r in prestressed_bar_rows],
             'max_concrete_strain_permille': float(kappa * (self.y_top - y_na) * 1000.0),
+            'y_na': float(y_na),
+            'kappa': float(kappa),
         }
 
     def _integrate_parabola(self, polygon, y_na, kappa):
