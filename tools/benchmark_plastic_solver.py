@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from tests.benchmark_compare import BenchmarkSweepSpec, run_benchmark_sweeps, summarize_benchmark
 from tests.pcross_benchmark_fixture import (
@@ -557,6 +558,8 @@ def main() -> None:
     unified_progress_md = out_dir / "plastic_unified_progress_summary.md"
     remaining_blockers_csv = out_dir / "plastic_remaining_blockers.csv"
     remaining_blockers_md = out_dir / "plastic_remaining_blockers.md"
+    reconstruction_csv = out_dir / "plastic_output_reconstruction_comparison.csv"
+    reconstruction_md = out_dir / "plastic_output_reconstruction_summary.md"
 
     legacy_shift_csv = out_dir / "plastic_legacy_shift.csv"
     legacy_shift_md = out_dir / "plastic_legacy_shift_summary.md"
@@ -762,6 +765,31 @@ def main() -> None:
     alignment.to_csv(alignment_csv, index=False)
     alignment_md.write_text("# Plastic alignment matrix\n\n" + _markdown_table(alignment) + "\n", encoding="utf-8")
 
+    old_frames = [run_benchmark_sweeps(build_pcross_tbeam_solver(prestress_eps0=0.004, mapping=DEFAULT_BENCHMARK_MAPPING), specs, semantic_profile="legacy_force_tension_centroid")]
+    for key in ["snit_a", "snit_b", "snit_c", "snit_d", "section0", "sectioniv"]:
+        case = EMBEDDED_BENCHMARK_CASES[key]
+        old_frames.append(
+            run_benchmark_sweeps(
+                case.solver_builder(),
+                [BenchmarkSweepSpec(load_case=case.load_case, p_target=case.load.P_target, angles_deg=case.load.angles_deg)],
+                reference_rows=case.reference_rows,
+                semantic_profile="legacy_force_tension_centroid",
+            )
+        )
+    detail_old = pd.concat(old_frames, ignore_index=True)
+
+    family_map = {3:"tbeam",4:"tbeam",101:"snit",102:"snit",103:"snit",104:"snit",201:"annular",202:"annular"}
+    rows_recon = []
+    for fam in ["tbeam","snit","annular"]:
+        old_f = detail_old[(detail_old["Mx_ref"].notna()) & (detail_old["load_case"].map(lambda v: family_map.get(int(v)))==fam)]
+        new_f = detail[(detail["Mx_ref"].notna()) & (detail["load_case"].map(lambda v: family_map.get(int(v)))==fam)]
+        for group, cols in {"strains":["rel_err_strain_concrete","rel_err_strain_mild","rel_err_strain_prestressed"], "lever_arms":["rel_err_L","rel_err_DX","rel_err_DY"], "moments":["rel_err_Mx","rel_err_My"], "kappa":["rel_err_kappa"], "compress_force":["rel_err_compress_force"]}.items():
+            old_vals = pd.concat([old_f[c].dropna() for c in cols if c in old_f.columns], ignore_index=True)
+            new_vals = pd.concat([new_f[c].dropna() for c in cols if c in new_f.columns], ignore_index=True)
+            rows_recon.append({"fixture_family":fam,"output_group":group,"max_relative_error_before":float(old_vals.max()) if not old_vals.empty else np.nan,"max_relative_error_after":float(new_vals.max()) if not new_vals.empty else np.nan,"median_relative_error_before":float(old_vals.median()) if not old_vals.empty else np.nan,"median_relative_error_after":float(new_vals.median()) if not new_vals.empty else np.nan})
+    reconstruction = pd.DataFrame(rows_recon)
+    reconstruction.to_csv(reconstruction_csv, index=False)
+    reconstruction_md.write_text("# Plastic output reconstruction comparison\n\n" + _markdown_table(reconstruction) + "\n", encoding="utf-8")
     unified_progress = _build_unified_progress_summary(detail)
     unified_progress.to_csv(unified_progress_csv, index=False)
     unified_progress_md.write_text("# Plastic unified progress summary\n\n" + _markdown_table(unified_progress) + "\n", encoding="utf-8")

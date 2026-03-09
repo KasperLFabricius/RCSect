@@ -268,44 +268,40 @@ def test_compress_force_is_direct_sum_of_compression_partitions():
     assert np.isclose(result["compress_force"], comp_total, rtol=0.0, atol=1e-9)
 
 
-def test_lever_arm_is_centroid_vector_and_not_m_over_compress_override():
+def test_load_point_and_lever_arm_reconstruction_uses_external_load_point_and_comp_centroid():
     case = EMBEDDED_BENCHMARK_CASES["snit_a"]
-    angle = 90.0
-    result = case.solver_builder().solve(angle_v_deg=angle, P_target=case.load.P_target)
+    result = case.solver_builder().solve(angle_v_deg=90.0, P_target=case.load.P_target)
+
+    assert result["load_point_defined"] is True
+    assert np.isclose(result["R"], np.hypot(result["y_load"], result["x_load"]), rtol=0.0, atol=1e-9)
+    assert np.isclose(result["U"], np.degrees(np.arctan2(result["y_load"], result["x_load"])), rtol=0.0, atol=1e-9)
+
+    p = case.load.P_target
+    assert np.isclose(result["x_load"], result["My"] / p, rtol=0.0, atol=1e-9)
+    assert np.isclose(result["y_load"], result["Mx"] / p, rtol=0.0, atol=1e-9)
 
     c = result["debug_resultant_centroids"]
-    dx_local = c["tension_zone_centroid_x"] - c["compress_zone_centroid_x"]
-    dy_local = c["tension_zone_centroid_y"] - c["compress_zone_centroid_y"]
-
-    angle_rad = np.radians(case.solver_builder().cs.local_rotation_deg(angle))
-    cos_a = np.cos(angle_rad)
-    sin_a = np.sin(angle_rad)
-    dx_global = dx_local * cos_a - dy_local * sin_a
-    dy_global = dx_local * sin_a + dy_local * cos_a
-
-    assert np.isclose(result["lever_DX"], dx_global, rtol=0.0, atol=1e-9)
-    assert np.isclose(result["lever_DY"], dy_global, rtol=0.0, atol=1e-9)
-    assert np.isclose(result["lever_L"], np.hypot(dx_global, dy_global), rtol=0.0, atol=1e-9)
-
-    # Guardrail: benchmark-critical path should not force moment/compress surrogate.
-    dy_from_m = result["Mx"] / max(result["compress_force"], 1e-9)
-    assert abs(result["lever_DY"] - dy_from_m) > 1e-4
+    dx = result["x_load"] - c["compress_zone_centroid_x"]
+    dy = result["y_load"] - c["compress_zone_centroid_y"]
+    assert np.isclose(result["lever_DX"], dx, rtol=0.0, atol=1e-9)
+    assert np.isclose(result["lever_DY"], dy, rtol=0.0, atol=1e-9)
+    assert np.isclose(result["lever_L"], np.hypot(dx, dy), rtol=0.0, atol=1e-9)
 
 
-def test_strain_outputs_follow_governing_force_bars_with_total_strain():
+def test_strain_outputs_use_max_abs_section_strain_bar_and_exclude_prestress_eps0_for_reporting():
     case = EMBEDDED_BENCHMARK_CASES["snit_a"]
     result = case.solver_builder().solve(angle_v_deg=90.0, P_target=case.load.P_target)
     dbg = result["debug_force_components"]
     sc = result["debug_strain_candidates"]
 
-    mild = max(dbg["mild_bar_details"], key=lambda r: abs(r["force_kN"]))
-    assert sc["strain_mild_governing_force_bar_id"] == mild["id"]
-    assert np.isclose(result["strain_mild"], -mild["strain_total"] * 1000.0, rtol=0.0, atol=1e-9)
+    mild = max(dbg["mild_bar_details"], key=lambda r: abs(r["strain_section"]))
+    assert sc["selected_mild_bar_id"] == mild["id"]
+    assert np.isclose(result["strain_mild"], -mild["strain_section"] * 1000.0, rtol=0.0, atol=1e-9)
 
-    prest = max(dbg["prestressed_bar_details"], key=lambda r: abs(r["force_kN"]))
-    assert sc["strain_prestressed_governing_force_bar_id"] == prest["id"]
-    assert np.isclose(result["strain_prestressed"], -prest["strain_total"] * 1000.0, rtol=0.0, atol=1e-9)
-    assert not np.isclose(result["strain_prestressed"], prest["strain_incremental"] * 1000.0, rtol=0.0, atol=1e-6)
+    prest = max(dbg["prestressed_bar_details"], key=lambda r: abs(r["strain_section"]))
+    assert sc["selected_prestress_bar_id"] == prest["id"]
+    assert np.isclose(result["strain_prestressed"], -prest["strain_section"] * 1000.0, rtol=0.0, atol=1e-9)
+    assert not np.isclose(result["strain_prestressed"], -prest["strain_total"] * 1000.0, rtol=0.0, atol=1e-6)
 
 
 def test_annular_dxdy_sign_symmetry_pairs_follow_reference_pattern():
@@ -355,10 +351,10 @@ def test_strain_reporting_is_compression_positive_in_outputs():
     result = case.solver_builder().solve(angle_v_deg=90.0, P_target=case.load.P_target)
     dbg = result["debug_force_components"]
 
-    mild = max(dbg["mild_bar_details"], key=lambda r: abs(r["force_kN"]))
-    prest = max(dbg["prestressed_bar_details"], key=lambda r: abs(r["force_kN"]))
-    assert np.isclose(result["strain_mild"], format_reported_strain(mild["strain_total"] * 1000.0), atol=1e-9)
-    assert np.isclose(result["strain_prestressed"], format_reported_strain(prest["strain_total"] * 1000.0), atol=1e-9)
+    mild = max(dbg["mild_bar_details"], key=lambda r: abs(r["strain_section"]))
+    prest = max(dbg["prestressed_bar_details"], key=lambda r: abs(r["strain_section"]))
+    assert np.isclose(result["strain_mild"], format_reported_strain(mild["strain_section"] * 1000.0), atol=1e-9)
+    assert np.isclose(result["strain_prestressed"], format_reported_strain(prest["strain_section"] * 1000.0), atol=1e-9)
 
 
 def test_zone_classification_uses_solved_strain_field_for_bars():

@@ -3,7 +3,7 @@ annular,compression force,0.0007635971565132672,<1%
 annular,curvature,0.001495696648268048,<1%
 annular,lever-arms,2.42050482258475,>5%
 annular,moments,0.0011384064992120775,<1%
-annular,strains,1.4514925034569215,>5%
+annular,strains,0.009828947618480643,<1%
 annular,warnings,,match=1.000
 snit,compression force,1.7945786894858,>5%
 snit,curvature,0.0047956443531201095,<1%
